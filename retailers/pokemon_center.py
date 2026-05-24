@@ -1,0 +1,302 @@
+"""
+Pokémon Center retailer module — two strategies working together.
+
+STRATEGY 1: Product availability check
+  Polls the product's JSON endpoint for live stock status.
+  Pokemon Center's platform exposes product data as JSON if you know where to look.
+  We parse their availability response directly.
+
+STRATEGY 2: Sitemap watcher (the "before anyone else" feature)
+  Pokemon Center adds new product URLs to their XML sitemap before the drop page
+  goes fully live. By watching the sitemap for NEW urls that weren't there last
+  check, you get an alert the moment a product is registered — sometimes minutes
+  before the drop is announced anywhere.
+
+How to find the product identifier:
+  - Go to the product page on pokemoncenter.com
+  - The URL contains the product ID: pokemoncenter.com/product/[ID]/[slug]
+  - Example: "290-86189" from .../product/290-86189/pokemon-tcg-...
+
+Watchlist entry format:
+  {
+    "name": "Pokemon TCG Prismatic Evolutions ETB",
+    "retailer": "pokemon_center",
+    "identifier": "290-86189",
+    "url": "https://www.pokemoncenter.com/product/290-86189/..."
+  }
+
+For sitemap watching, add a special entry:
+  {
+    "name": "Pokemon Center Sitemap — watch for new drops",
+    "retailer": "pokemon_center_sitemap",
+    "identifier": "sitemap",
+    "url": "https://www.pokemoncenter.com/sitemap.xml",
+    "keywords": ["elite trainer", "booster box", "premium"]   <-- optional filter
+  }
+"""
+
+import re
+import requests
+import xml.etree.ElementTree as ET
+from .base import RetailerBase, StockResult
+
+BASE = "https://www.pokemoncenter.com"
+
+HEADERS = {
+    **RetailerBase.BASE_HEADERS,
+    "Accept": "application/json, text/html, */*",
+    "Referer": "https://www.pokemoncenter.com/",
+}
+
+
+class PokemonCenter(RetailerBase):
+    """Checks availability of a known product."""
+    default_poll_interval = 30  # Pokemon Center drops are time-sensitive
+
+    def check_availability(self, item: dict) -> StockResult:
+        product_id = item["identifier"]
+        url = item["url"]
+        name = item["name"]
+
+        # Pokemon Center exposes product data in a JSON endpoint
+        api_url = f"{BASE}/api/2.0/product/{product_id}"
+
+        try:
+            resp = requests.get(api_url, headers=HEADERS, timeout=10)
+
+            if resp.status_code == 404:
+                # Product not live yet — not an error, just not available
+                return StockResult(
+                    available=False,
+                    retailer="Pokémon Center",
+                    product_name=name,
+                    url=url,
+                    price=None,
+                    note="Product page not live yet",
+                )
+
+            resp.raise_for_status()
+            data = resp.json()
+
+            # Navigate their response structure
+            # The exact keys depend on their API version; we check several common patterns
+            available = False
+            price = None
+
+            # Pattern A: top-level availability flag
+            if "available" in data:
+                available = bool(data["available"])
+
+            # Pattern B: variants array (for products with sizes/editions)
+            elif "variants" in data:
+                variants = data.get("variants", [])
+                available = any(v.get("available", False) for v in variants)
+
+            # Pattern C: inventory_quantity
+            elif "inventory_quantity" in data:
+                available = data["inventory_quantity"] > 0
+
+            # Try to get price
+            if "price" in data:
+                price = data["price"]
+            elif "variants" in data and data["variants"]:
+                price = data["variants"][0].get("price")
+                if price:
+                    price = float(price) / 100  # Shopify returns cents
+
+            product_name = data.get("title", name)
+
+            return StockResult(
+                available=available,
+                retailer="Pokémon Center",
+                product_name=product_name,
+                url=url,
+                price=price,
+                note="In stock — GO GO GO" if available else None,
+            )
+
+        except requests.RequestException as e:
+            # Fall back to HTML check on API failure
+            return self._html_fallback(item, str(e))
+
+    def _html_fallback(self, item: dict, error_note: str) -> StockResult:
+        """
+        If the JSON API fails, load the actual page and check for
+        out-of-stock indicators in the HTML. Less precise but works as backup.
+        """
+        try:
+            resp = requests.get(item["url"], headers=HEADERS, timeout=15)
+            html = resp.text.lower()
+
+            # "sold out" / "out of stock" present = unavailable
+            # "add to cart" / "add to bag" = available
+            sold_out_signals = ["sold out", "out of stock", "unavailable"]
+            in_stock_signals = ["add to cart", "add to bag"]
+
+            if any(sig in html for sig in in_stock_signals):
+                available = True
+            elif any(sig in html for sig in sold_out_signals):
+                available = False
+            else:
+                # Ambiguous — treat as unavailable to avoid false alerts
+                available = False
+
+            return StockResult(
+                available=available,
+                retailer="Pokémon Center",
+                product_name=item["name"],
+                url=item["url"],
+                price=None,
+                note="HTML fallback (API unavailable)" if available else None,
+            )
+        except Exception:
+            return StockResult(
+                available=False,
+                retailer="Pokémon Center",
+                product_name=item["name"],
+                url=item["url"],
+                price=None,
+                note=f"Both API and HTML check failed: {error_note}",
+            )
+
+
+class PokemonCenterSitemap(RetailerBase):
+    """
+    Watches the Pokemon Center sitemap for NEW product URLs.
+    Fires an alert when a URL appears that wasn't there last check.
+    This is your early-warning system for unannounced drops.
+    """
+    default_poll_interval = 60
+
+    def __init__(self):
+        self._known_urls: set = set()
+        self._initialized = False
+
+    def _fetch_all_product_urls(self, sitemap_url: str) -> set:
+        """
+        Handles both sitemap indexes and regular sitemaps.
+        Pokemon Center uses a sitemap index — sitemap.xml links to
+        multiple child sitemaps. We follow all of them and collect
+        every product URL across all child sitemaps.
+        """
+        ns = {"sm": "http://www.sitemaps.org/schemas/sitemap/0.9"}
+        try:
+            resp = requests.get(sitemap_url, headers=HEADERS, timeout=15)
+            resp.raise_for_status()
+            root = ET.fromstring(resp.content)
+
+            # Check if this is a sitemap INDEX (links to other sitemaps)
+            child_sitemaps = root.findall("sm:sitemap/sm:loc", ns)
+            if child_sitemaps:
+                # Follow each child sitemap and collect product URLs
+                all_product_urls = set()
+                for loc in child_sitemaps:
+                    child_url = loc.text.strip() if loc.text else ""
+                    if not child_url:
+                        continue
+                    try:
+                        child_resp = requests.get(child_url, headers=HEADERS, timeout=15)
+                        child_resp.raise_for_status()
+                        child_root = ET.fromstring(child_resp.content)
+                        for url_loc in child_root.findall(".//sm:loc", ns):
+                            url = url_loc.text.strip() if url_loc.text else ""
+                            if "/product/" in url:
+                                all_product_urls.add(url)
+                    except Exception:
+                        continue  # Skip failed child sitemaps, keep going
+                return all_product_urls
+
+            # Regular sitemap — collect product URLs directly
+            current_urls = set()
+            for loc in root.findall(".//sm:loc", ns):
+                url = loc.text.strip() if loc.text else ""
+                if "/product/" in url:
+                    current_urls.add(url)
+            return current_urls
+
+        except Exception:
+            return None
+
+    def check_availability(self, item: dict) -> StockResult:
+        keywords = item.get("keywords", [])
+        sitemap_url = item.get("url", f"{BASE}/sitemap.xml")
+
+        try:
+            current_urls = self._fetch_all_product_urls(sitemap_url)
+            if current_urls is None:
+                return StockResult(
+                    available=False,
+                    retailer="Pokémon Center (Sitemap)",
+                    product_name="Sitemap fetch failed",
+                    url=sitemap_url,
+                    price=None,
+                    note="Could not retrieve sitemap",
+                )
+
+            if not self._initialized:
+                # First run — just record what exists, don't alert on everything
+                self._known_urls = current_urls
+                self._initialized = True
+                return StockResult(
+                    available=False,
+                    retailer="Pokémon Center (Sitemap)",
+                    product_name="Sitemap baseline recorded",
+                    url=sitemap_url,
+                    price=None,
+                    note=f"Tracking {len(current_urls)} product URLs",
+                )
+
+            # Find URLs that appeared since last check
+            new_urls = current_urls - self._known_urls
+            self._known_urls = current_urls
+
+            if not new_urls:
+                return StockResult(
+                    available=False,
+                    retailer="Pokémon Center (Sitemap)",
+                    product_name="No new products detected",
+                    url=sitemap_url,
+                    price=None,
+                    note=None,
+                )
+
+            # If keyword filter is set, only alert on matching URLs
+            if keywords:
+                matching = [
+                    u for u in new_urls
+                    if any(kw.lower() in u.lower() for kw in keywords)
+                ]
+            else:
+                matching = list(new_urls)
+
+            if matching:
+                # Alert on the first new URL (monitor.py will fire alerts)
+                new_url = matching[0]
+                all_new = "\n".join(matching)
+                return StockResult(
+                    available=True,   # "available" = new product detected
+                    retailer="Pokémon Center (Sitemap)",
+                    product_name=f"NEW PRODUCT DETECTED: {len(matching)} new URL(s)",
+                    url=new_url,
+                    price=None,
+                    note=f"New URLs:\n{all_new}",
+                )
+
+            return StockResult(
+                available=False,
+                retailer="Pokémon Center (Sitemap)",
+                product_name=f"{len(new_urls)} new URL(s) — no keyword match",
+                url=sitemap_url,
+                price=None,
+                note=None,
+            )
+
+        except Exception as e:
+            return StockResult(
+                available=False,
+                retailer="Pokémon Center (Sitemap)",
+                product_name="Sitemap check failed",
+                url=sitemap_url,
+                price=None,
+                note=str(e),
+            )

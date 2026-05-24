@@ -1,0 +1,52 @@
+{
+  "settings": {
+    "poll_interval_seconds": 60,
+    "release_mode_interval_seconds": 10
+  },
+  "watchlist": [
+    {
+      "_comment": "--- POKEMON CENTER EXAMPLES ---",
+      "name": "Pokemon Center Sitemap — watch for unannounced drops",
+      "retailer": "pokemon_center_sitemap",
+      "identifier": "sitemap",
+      "url": "https://www.pokemoncenter.com/sitemap.xml",
+      "keywords": ["elite-trainer", "booster-box", "premium-collection", "special-collection"]
+    },
+    {
+      "name": "Pokemon TCG Prismatic Evolutions ETB",
+      "retailer": "pokemon_center",
+      "identifier": "290-86189",
+      "url": "https://www.pokemoncenter.com/product/290-86189/pokemon-tcg-scarlet-violet-prismatic-evolutions-elite-trainer-box"
+    },
+
+    {
+      "_comment": "--- BEST BUY EXAMPLES (get your API key at developer.bestbuy.com) ---",
+      "name": "Pokemon TCG Prismatic Evolutions ETB",
+      "retailer": "best_buy",
+      "identifier": "6609999",
+      "url": "https://www.bestbuy.com/site/pokemon-tcg-scarlet-violet-prismatic-evolutions-elite-trainer-box/6609999.p"
+    },
+
+    {
+      "_comment": "--- TARGET ---",
+      "name": "Pokemon TCG Prismatic Evolutions Elite Trainer Box",
+      "retailer": "target",
+      "identifier": "1011206804",
+      "url": "https://www.target.com/p/pok-233-mon-trading-card-game-scarlet-38-violet-8212-prismatic-evolutions-elite-trainer-box/-/A-1011206804"
+    },
+    {
+      "name": "Pokemon TCG Prismatic Evolutions Super Premium Collection",
+      "retailer": "target",
+      "identifier": "94300072",
+      "url": "https://www.target.com/p/pok-233-mon-trading-card-game-scarlet-38-violet-8212-prismatic-evolutions-super-premium-collection/-/A-94300072"
+    },
+
+    {
+      "_comment": "--- WALMART EXAMPLES ---",
+      "name": "Pokemon TCG Prismatic Evolutions ETB",
+      "retailer": "walmart",
+      "identifier": "7534009817",
+      "url": "https://www.walmart.com/ip/Pokemon-Trading-Card-Game-Scarlet-Violet-Prismatic-Evolutions-Elite-Trainer-Box/7534009817"
+    }
+  ]
+}
