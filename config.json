@@ -5,48 +5,44 @@
   },
   "watchlist": [
     {
-      "_comment": "--- POKEMON CENTER EXAMPLES ---",
-      "name": "Pokemon Center Sitemap — watch for unannounced drops",
+      "_comment": "--- POKEMON CENTER SITEMAP — catches unannounced drops before they go public ---",
+      "name": "Pokemon Center Sitemap — watch for 30th Anniversary drops",
       "retailer": "pokemon_center_sitemap",
       "identifier": "sitemap",
       "url": "https://www.pokemoncenter.com/sitemap.xml",
-      "keywords": ["elite-trainer", "booster-box", "premium-collection", "special-collection"]
-    },
-    {
-      "name": "Pokemon TCG Prismatic Evolutions ETB",
-      "retailer": "pokemon_center",
-      "identifier": "290-86189",
-      "url": "https://www.pokemoncenter.com/product/290-86189/pokemon-tcg-scarlet-violet-prismatic-evolutions-elite-trainer-box"
-    },
-
-    {
-      "_comment": "--- BEST BUY EXAMPLES (get your API key at developer.bestbuy.com) ---",
-      "name": "Pokemon TCG Prismatic Evolutions ETB",
-      "retailer": "best_buy",
-      "identifier": "6609999",
-      "url": "https://www.bestbuy.com/site/pokemon-tcg-scarlet-violet-prismatic-evolutions-elite-trainer-box/6609999.p"
+      "keywords": ["30th", "anniversary", "elite-trainer", "booster-bundle"]
     },
 
     {
       "_comment": "--- TARGET ---",
-      "name": "Pokemon TCG Prismatic Evolutions Elite Trainer Box",
+      "name": "Pokemon 30th Anniversary Elite Trainer Box",
       "retailer": "target",
-      "identifier": "1011206804",
-      "url": "https://www.target.com/p/pok-233-mon-trading-card-game-scarlet-38-violet-8212-prismatic-evolutions-elite-trainer-box/-/A-1011206804"
+      "identifier": "1010892076",
+      "url": "https://www.target.com/p/moo/A-1010892076"
     },
     {
-      "name": "Pokemon TCG Prismatic Evolutions Super Premium Collection",
+      "name": "Pokemon 2026 30th Anniversary Booster Bundle Box",
       "retailer": "target",
-      "identifier": "94300072",
-      "url": "https://www.target.com/p/pok-233-mon-trading-card-game-scarlet-38-violet-8212-prismatic-evolutions-super-premium-collection/-/A-94300072"
+      "identifier": "1011407490",
+      "url": "https://www.target.com/p/moo/A-1011407490"
     },
-
     {
-      "_comment": "--- WALMART EXAMPLES ---",
-      "name": "Pokemon TCG Prismatic Evolutions ETB",
-      "retailer": "walmart",
-      "identifier": "7534009817",
-      "url": "https://www.walmart.com/ip/Pokemon-Trading-Card-Game-Scarlet-Violet-Prismatic-Evolutions-Elite-Trainer-Box/7534009817"
+      "name": "Pokemon 30th Anniversary EX Tin",
+      "retailer": "target",
+      "identifier": "1010892069",
+      "url": "https://www.target.com/p/moo/A-1010892069"
+    },
+    {
+      "name": "Pokemon 30th Anniversary EX Box 1",
+      "retailer": "target",
+      "identifier": "1010892068",
+      "url": "https://www.target.com/p/moo/A-1010892068"
+    },
+    {
+      "name": "Pokemon 30th Anniversary EX Box 2",
+      "retailer": "target",
+      "identifier": "1010892065",
+      "url": "https://www.target.com/p/moo/A-1010892065"
     }
   ]
 }
