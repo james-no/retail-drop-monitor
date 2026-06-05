@@ -43,6 +43,40 @@
       "retailer": "target",
       "identifier": "1010892065",
       "url": "https://www.target.com/p/moo/A-1010892065"
+    },
+
+    {
+      "_comment": "--- PREMIUM BANDAI (p-bandai.com) ---",
+      "name": "One Piece Card Game Memorial Collection (N2888744001)",
+      "retailer": "premium_bandai",
+      "identifier": "N2888744001",
+      "url": "https://p-bandai.com/us/item/N2888744001"
+    },
+    {
+      "_comment": "Lottery item — alerts when drawing opens",
+      "name": "One Piece — Lottery Item (N2835216003)",
+      "retailer": "premium_bandai",
+      "identifier": "N2835216003",
+      "url": "https://p-bandai.com/us/item/N2835216003"
+    },
+    {
+      "_comment": "Standard pre-order — alerts when pre-order opens",
+      "name": "One Piece — Standard Item (N2835216004)",
+      "retailer": "premium_bandai",
+      "identifier": "N2835216004",
+      "url": "https://p-bandai.com/us/item/N2835216004"
+    },
+    {
+      "name": "One Piece Card Game — New Drops (Bandai Card Shop)",
+      "retailer": "premium_bandai_series",
+      "identifier": "series:03-002|shop:05-0004",
+      "url": "https://p-bandai.com/us/series/onepiece-series?_f_shops=05-0004&_f_series=03-002"
+    },
+    {
+      "name": "Digimon Card Game — New Drops",
+      "retailer": "premium_bandai_series",
+      "identifier": "series:03-042",
+      "url": "https://p-bandai.com/us/series/digimon-series?_f_series=03-042"
     }
   ]
 }
