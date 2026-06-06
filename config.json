@@ -14,6 +14,20 @@
     },
 
     {
+      "_comment": "--- POKEMON CENTER ---",
+      "name": "Pokemon Center — Pitch Black (10-10416-112)",
+      "retailer": "pokemon_center",
+      "identifier": "10-10416-112",
+      "url": "https://www.pokemoncenter.com/product/10-10416-112"
+    },
+    {
+      "name": "Pokemon Center — Booster Box (10-10425-120)",
+      "retailer": "pokemon_center",
+      "identifier": "10-10425-120",
+      "url": "https://www.pokemoncenter.com/product/10-10425-120"
+    },
+
+    {
       "_comment": "--- TARGET ---",
       "name": "Pokemon 30th Anniversary Elite Trainer Box",
       "retailer": "target",
