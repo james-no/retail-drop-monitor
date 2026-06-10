@@ -25,6 +25,7 @@ Hits each retailer's **internal inventory API directly** (the same endpoint thei
 | **Walmart** | `__NEXT_DATA__` JSON extraction | Specific products by item ID |
 | **Premium Bandai** | Session-based `fillProductDetailFlags` API | Specific items, pre-orders, lottery openings |
 | **Premium Bandai (Series)** | Series/shop content API | New arrivals across a full series or shop |
+| **Square Enix Store** | Product page `og:availability` meta tag | Specific products, restocks and pre-orders |
 
 ---
 
@@ -86,6 +87,7 @@ Edit `config.json`. Each item needs:
 | Walmart | `walmart` | URL: `.../ip/name/7534009817` | `7534009817` |
 | Premium Bandai (item) | `premium_bandai` | URL: `.../item/N2888744001` | `N2888744001` |
 | Premium Bandai (series) | `premium_bandai_series` | `series:{id}` or `series:{id}\|shop:{id}` | `series:03-042` |
+| Square Enix Store | `square_enix` | Full product page URL slug | `final-fantasy-resonance-collector_s-edition-goods-box` |
 
 **Premium Bandai series watcher** — monitors a full series or shop for new/available products:
 
@@ -179,7 +181,8 @@ retailers/
   ├── best_buy.py          — Internal badging API + HTML fallback
   ├── target.py            — Internal fulfillment API
   ├── walmart.py           — __NEXT_DATA__ JSON extraction
-  └── premium_bandai.py    — Session-based p-bandai.com API (items + series)
+  ├── premium_bandai.py    — Session-based p-bandai.com API (items + series)
+  └── square_enix.py       — BigCommerce product page og:availability check
 
 alerts/
   ├── discord_webhook.py   — Rich embed with @everyone ping

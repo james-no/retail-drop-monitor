@@ -48,6 +48,19 @@ HEADERS = {
     "Referer": "https://www.pokemoncenter.com/",
 }
 
+# Phrases Pokémon Center shows on its "site is down for maintenance" page
+MAINTENANCE_SIGNALS = [
+    "scheduled maintenance",
+    "performing maintenance",
+    "currently performing",
+    "check back soon",
+    "down for maintenance",
+]
+
+
+def _is_maintenance_page(html_lower: str) -> bool:
+    return any(sig in html_lower for sig in MAINTENANCE_SIGNALS)
+
 
 class PokemonCenter(RetailerBase):
     """Checks availability of a known product."""
@@ -146,6 +159,19 @@ class PokemonCenter(RetailerBase):
 
             html = resp.text
             html_lower = html.lower()
+
+            if _is_maintenance_page(html_lower):
+                return StockResult(
+                    available=False,
+                    retailer="Pokémon Center",
+                    product_name=item["name"],
+                    url=item["url"],
+                    price=None,
+                    note=(
+                        f"API failed ({error_note}); Pokémon Center is down for "
+                        f"scheduled maintenance — not a real stock signal, check back later"
+                    ),
+                )
 
             block_signals = [
                 "pardon our interruption",
@@ -262,6 +288,10 @@ class PokemonCenterSitemap(RetailerBase):
             if resp.status_code != 200:
                 return None, f"HTTP {resp.status_code} fetching sitemap (possible bot-block)"
             resp.raise_for_status()
+
+            if _is_maintenance_page(resp.text.lower()):
+                return None, "Pokémon Center is down for scheduled maintenance"
+
             root = ET.fromstring(resp.content)
 
             # Check if this is a sitemap INDEX (links to other sitemaps)

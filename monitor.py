@@ -28,7 +28,7 @@ from alerts import discord_webhook
 
 # Substrings that indicate a check failed to actually run (network error,
 # blocked, timeout, parse failure, etc.) rather than a normal "not in stock".
-FAILURE_MARKERS = ("error", "failed", "timed out", "could not retrieve")
+FAILURE_MARKERS = ("error", "failed", "timed out", "could not retrieve", "maintenance")
 
 
 def _is_failure(result) -> bool:

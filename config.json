@@ -85,6 +85,14 @@
       "retailer": "premium_bandai_series",
       "identifier": "series:03-042",
       "url": "https://p-bandai.com/us/series/digimon-series?_f_series=03-042"
+    },
+
+    {
+      "_comment": "--- SQUARE ENIX STORE ---",
+      "name": "Final Fantasy Resonance Collector's Edition Goods Box",
+      "retailer": "square_enix",
+      "identifier": "final-fantasy-resonance-collector_s-edition-goods-box",
+      "url": "https://na.store.square-enix-games.com/final-fantasy-resonance-collector_s-edition-goods-box"
     }
   ]
 }
