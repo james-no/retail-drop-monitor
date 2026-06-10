@@ -122,24 +122,90 @@ class PokemonCenter(RetailerBase):
     def _html_fallback(self, item: dict, error_note: str) -> StockResult:
         """
         If the JSON API fails, load the actual page and check for
-        out-of-stock indicators in the HTML. Less precise but works as backup.
+        out-of-stock indicators in the HTML. Less precise but works as backup,
+        and is generally less likely to get rate-limited than the API during
+        a high-traffic drop.
         """
         try:
             resp = requests.get(item["url"], headers=HEADERS, timeout=15)
-            html = resp.text.lower()
 
-            # "sold out" / "out of stock" present = unavailable
-            # "add to cart" / "add to bag" = available
-            sold_out_signals = ["sold out", "out of stock", "unavailable"]
+            # A blocked/rate-limited request often comes back as a 403/429/503
+            # with a "Pardon Our Interruption" style page, not real product HTML
+            if resp.status_code in (403, 429, 503):
+                return StockResult(
+                    available=False,
+                    retailer="Pokémon Center",
+                    product_name=item["name"],
+                    url=item["url"],
+                    price=None,
+                    note=(
+                        f"API failed ({error_note}); HTML check got HTTP {resp.status_code} "
+                        f"— likely rate-limited/blocked, not a real stock signal"
+                    ),
+                )
+
+            html = resp.text
+            html_lower = html.lower()
+
+            block_signals = [
+                "pardon our interruption",
+                "access denied",
+                "are you a human",
+                "captcha",
+                "request blocked",
+                "reference #",
+            ]
+            if any(sig in html_lower for sig in block_signals):
+                return StockResult(
+                    available=False,
+                    retailer="Pokémon Center",
+                    product_name=item["name"],
+                    url=item["url"],
+                    price=None,
+                    note=(
+                        f"API failed ({error_note}); HTML page looks like a "
+                        f"block/CAPTCHA page, not a real stock signal"
+                    ),
+                )
+
+            # Most reliable: structured product data (schema.org) embedded in the page
+            schema_match = re.search(r'"availability"\s*:\s*"([^"]+)"', html, re.IGNORECASE)
+            if schema_match:
+                availability = schema_match.group(1).lower()
+                available = any(
+                    s in availability for s in ("instock", "limitedavailability", "preorder")
+                )
+                if available:
+                    note = f"In stock — GO GO GO (HTML structured data: {availability})"
+                else:
+                    note = f"API failed ({error_note}); HTML structured data shows: {availability}"
+                return StockResult(
+                    available=available,
+                    retailer="Pokémon Center",
+                    product_name=item["name"],
+                    url=item["url"],
+                    price=None,
+                    note=note,
+                )
+
+            # Fall back to plain-text button/label signals
+            sold_out_signals = ["sold out", "out of stock", "currently unavailable", "notify me when"]
             in_stock_signals = ["add to cart", "add to bag"]
 
-            if any(sig in html for sig in in_stock_signals):
+            if any(sig in html_lower for sig in sold_out_signals):
+                available = False
+                note = f"API failed ({error_note}); HTML shows sold out / notify me"
+            elif any(sig in html_lower for sig in in_stock_signals):
                 available = True
-            elif any(sig in html for sig in sold_out_signals):
-                available = False
+                note = "In stock — GO GO GO (HTML fallback, found 'add to cart/bag')"
             else:
-                # Ambiguous — treat as unavailable to avoid false alerts
+                # Ambiguous — treat as unavailable to avoid false alerts,
+                # but say so explicitly instead of staying silent
                 available = False
+                note = (
+                    f"API failed ({error_note}); HTML check inconclusive "
+                    f"(page may be a block/CAPTCHA page during high traffic — verify manually)"
+                )
 
             return StockResult(
                 available=available,
@@ -147,16 +213,25 @@ class PokemonCenter(RetailerBase):
                 product_name=item["name"],
                 url=item["url"],
                 price=None,
-                note="HTML fallback (API unavailable)" if available else None,
+                note=note,
             )
-        except Exception:
+        except requests.exceptions.Timeout:
             return StockResult(
                 available=False,
                 retailer="Pokémon Center",
                 product_name=item["name"],
                 url=item["url"],
                 price=None,
-                note=f"Both API and HTML check failed: {error_note}",
+                note=f"API failed ({error_note}); HTML fallback also timed out",
+            )
+        except requests.RequestException as e:
+            return StockResult(
+                available=False,
+                retailer="Pokémon Center",
+                product_name=item["name"],
+                url=item["url"],
+                price=None,
+                note=f"Both API and HTML check failed — API: {error_note} | HTML: {e}",
             )
 
 
@@ -172,16 +247,20 @@ class PokemonCenterSitemap(RetailerBase):
         self._known_urls: set = set()
         self._initialized = False
 
-    def _fetch_all_product_urls(self, sitemap_url: str) -> set:
+    def _fetch_all_product_urls(self, sitemap_url: str) -> tuple:
         """
         Handles both sitemap indexes and regular sitemaps.
         Pokemon Center uses a sitemap index — sitemap.xml links to
         multiple child sitemaps. We follow all of them and collect
         every product URL across all child sitemaps.
+
+        Returns (urls_or_None, error_message_or_None)
         """
         ns = {"sm": "http://www.sitemaps.org/schemas/sitemap/0.9"}
         try:
             resp = requests.get(sitemap_url, headers=HEADERS, timeout=15)
+            if resp.status_code != 200:
+                return None, f"HTTP {resp.status_code} fetching sitemap (possible bot-block)"
             resp.raise_for_status()
             root = ET.fromstring(resp.content)
 
@@ -190,21 +269,28 @@ class PokemonCenterSitemap(RetailerBase):
             if child_sitemaps:
                 # Follow each child sitemap and collect product URLs
                 all_product_urls = set()
+                child_errors = []
                 for loc in child_sitemaps:
                     child_url = loc.text.strip() if loc.text else ""
                     if not child_url:
                         continue
                     try:
                         child_resp = requests.get(child_url, headers=HEADERS, timeout=15)
-                        child_resp.raise_for_status()
+                        if child_resp.status_code != 200:
+                            child_errors.append(f"{child_url}: HTTP {child_resp.status_code}")
+                            continue
                         child_root = ET.fromstring(child_resp.content)
                         for url_loc in child_root.findall(".//sm:loc", ns):
                             url = url_loc.text.strip() if url_loc.text else ""
                             if "/product/" in url:
                                 all_product_urls.add(url)
-                    except Exception:
+                    except Exception as e:
+                        child_errors.append(f"{child_url}: {e}")
                         continue  # Skip failed child sitemaps, keep going
-                return all_product_urls
+
+                if not all_product_urls and child_errors:
+                    return None, f"All child sitemaps failed: {child_errors[0]}"
+                return all_product_urls, None
 
             # Regular sitemap — collect product URLs directly
             current_urls = set()
@@ -212,17 +298,23 @@ class PokemonCenterSitemap(RetailerBase):
                 url = loc.text.strip() if loc.text else ""
                 if "/product/" in url:
                     current_urls.add(url)
-            return current_urls
+            return current_urls, None
 
-        except Exception:
-            return None
+        except requests.exceptions.Timeout:
+            return None, "Request timed out"
+        except requests.exceptions.ConnectionError as e:
+            return None, f"Connection error: {e}"
+        except ET.ParseError as e:
+            return None, f"Failed to parse sitemap XML (likely got an HTML block page): {e}"
+        except Exception as e:
+            return None, f"{type(e).__name__}: {e}"
 
     def check_availability(self, item: dict) -> StockResult:
         keywords = item.get("keywords", [])
         sitemap_url = item.get("url", f"{BASE}/sitemap.xml")
 
         try:
-            current_urls = self._fetch_all_product_urls(sitemap_url)
+            current_urls, fetch_error = self._fetch_all_product_urls(sitemap_url)
             if current_urls is None:
                 return StockResult(
                     available=False,
@@ -230,7 +322,7 @@ class PokemonCenterSitemap(RetailerBase):
                     product_name="Sitemap fetch failed",
                     url=sitemap_url,
                     price=None,
-                    note="Could not retrieve sitemap",
+                    note=f"Could not retrieve sitemap — {fetch_error}",
                 )
 
             if not self._initialized:

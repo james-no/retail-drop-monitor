@@ -62,3 +62,58 @@ def send_alert(result) -> bool:
     except requests.RequestException as e:
         print(f"  [Discord] ❌ Failed: {e}")
         return False
+
+
+def send_status_alert(retailer: str, product_name: str, url: str, note: str, recovered: bool) -> bool:
+    """
+    Sends a Discord embed reporting that a check started failing, or that
+    it recovered after previously failing. Used so monitor problems don't
+    sit silently in the terminal.
+
+    Returns True on success, False on failure.
+    """
+    webhook_url = os.getenv("DISCORD_WEBHOOK_URL")
+    if not webhook_url:
+        print("  [Discord] Skipped — DISCORD_WEBHOOK_URL not set")
+        return False
+
+    timestamp = datetime.utcnow().isoformat() + "Z"
+
+    if recovered:
+        title = f"✅ {retailer} — check recovered"
+        color = 0x00FF00
+        description = f"**{product_name}**\nThis check is working again."
+    else:
+        title = f"⚠️ {retailer} — check is failing"
+        color = 0xFF0000
+        description = f"**{product_name}**\nThe monitor cannot reliably check this item right now."
+
+    embed = {
+        "title": title,
+        "description": description,
+        "color": color,
+        "url": url,
+        "fields": [
+            {"name": "📝 Detail", "value": note or "(no detail)", "inline": False},
+        ],
+        "footer": {"text": "Retail Drop Monitor — status update"},
+        "timestamp": timestamp,
+    }
+
+    # Add a content message so this triggers a phone push notification
+    # even if the channel's notification settings are "Only @mentions"
+    if recovered:
+        content = "✅ Monitor check recovered"
+    else:
+        content = "@everyone ⚠️ Monitor check is failing — see below"
+
+    payload = {"content": content, "embeds": [embed]}
+
+    try:
+        resp = requests.post(webhook_url, json=payload, timeout=10)
+        resp.raise_for_status()
+        print(f"  [Discord] ✅ Status alert sent")
+        return True
+    except requests.RequestException as e:
+        print(f"  [Discord] ❌ Status alert failed: {e}")
+        return False

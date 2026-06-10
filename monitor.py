@@ -24,6 +24,16 @@ from dotenv import load_dotenv
 
 from retailers import RETAILER_MAP
 from alerts import fire_all
+from alerts import discord_webhook
+
+# Substrings that indicate a check failed to actually run (network error,
+# blocked, timeout, parse failure, etc.) rather than a normal "not in stock".
+FAILURE_MARKERS = ("error", "failed", "timed out", "could not retrieve")
+
+
+def _is_failure(result) -> bool:
+    text = f"{result.product_name} {result.note or ''}".lower()
+    return any(marker in text for marker in FAILURE_MARKERS)
 
 # Load .env file (Discord webhook, Twilio credentials, Best Buy API key)
 load_dotenv()
@@ -101,6 +111,10 @@ def run_monitor(config: dict, release_mode: bool = False):
     # so we don't spam alerts every poll cycle
     alerted: set = set()
 
+    # Track which items are currently in a "failing" state (sitemap/API
+    # errors, timeouts, etc.) so we alert once on failure and once on recovery
+    failing: set = set()
+
     retailer_instances = build_retailer_instances(watchlist)
 
     mode_label = "🚀 RELEASE MODE" if release_mode else "📡 Normal mode"
@@ -126,6 +140,15 @@ def run_monitor(config: dict, release_mode: bool = False):
                 result = retailer.check_availability(item)
             except Exception as e:
                 print(f"  ⚠️  Error checking {item.get('name', '?')}: {e}")
+                if item_id not in failing:
+                    failing.add(item_id)
+                    discord_webhook.send_status_alert(
+                        retailer=retailer_key,
+                        product_name=item.get("name", "?"),
+                        url=item.get("url", ""),
+                        note=f"Unhandled error: {e}",
+                        recovered=False,
+                    )
                 continue
 
             status_icon = "✅" if result.available else "⬜"
@@ -134,6 +157,30 @@ def run_monitor(config: dict, release_mode: bool = False):
 
             if result.note and not result.available:
                 print(f"     → {result.note}")
+
+            # Track failure/recovery transitions and alert once on each
+            is_fail = _is_failure(result)
+            was_failing = item_id in failing
+            if is_fail and not was_failing:
+                failing.add(item_id)
+                print(f"  🚨 [{result.retailer}] {item.get('name', '?')} check is now FAILING")
+                discord_webhook.send_status_alert(
+                    retailer=result.retailer,
+                    product_name=item.get("name", result.product_name),
+                    url=result.url,
+                    note=result.note,
+                    recovered=False,
+                )
+            elif not is_fail and was_failing:
+                failing.discard(item_id)
+                print(f"  ✅ [{result.retailer}] {item.get('name', '?')} check has RECOVERED")
+                discord_webhook.send_status_alert(
+                    retailer=result.retailer,
+                    product_name=item.get("name", result.product_name),
+                    url=result.url,
+                    note="Check is working normally again.",
+                    recovered=True,
+                )
 
             # Fire alerts if newly in stock
             if result.available and item_id not in alerted:
