@@ -196,6 +196,14 @@ Pokémon Center registers new products in their XML sitemap **before** the drop 
 
 ---
 
+## Known limitations
+
+This monitor alerts you to drops and restocks, it does not guarantee a checkout against dedicated bot networks. The monitor also alerts you (separately, via Discord) if a check itself starts failing or recovers, so problems do not sit silently in the terminal.
+
+See [LIMITATIONS.md](LIMITATIONS.md) for details, including what went wrong during the Pitch Black drop and how it was fixed.
+
+---
+
 ## Disclaimer
 
 For personal use only — to buy products at retail price. Not for scalping or reselling.
