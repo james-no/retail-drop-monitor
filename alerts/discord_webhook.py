@@ -24,8 +24,15 @@ def send_alert(result) -> bool:
         print("  [Discord] Skipped — DISCORD_WEBHOOK_URL not set")
         return False
 
-    # Color: green for in-stock alert, gold for sitemap detection
-    color = 0x00FF00 if "sitemap" not in result.retailer.lower() else 0xFFD700
+    # Color: green for solid in-stock, orange if the note suggests limited
+    # stock (grab it fast, but it's not a full restock), gold for sitemap hits
+    note_lower = (result.note or "").lower()
+    if "sitemap" in result.retailer.lower():
+        color = 0xFFD700
+    elif "limited" in note_lower or "low stock" in note_lower:
+        color = 0xFFA500
+    else:
+        color = 0x00FF00
 
     price_str = f"${result.price:.2f}" if result.price else "Check site"
     timestamp = datetime.utcnow().isoformat() + "Z"
@@ -116,4 +123,45 @@ def send_status_alert(retailer: str, product_name: str, url: str, note: str, rec
         return True
     except requests.RequestException as e:
         print(f"  [Discord] ❌ Status alert failed: {e}")
+        return False
+
+
+def send_heartbeat(items: list, failing: set) -> bool:
+    """
+    Sends a low-key "still running" heartbeat once a day. This is the only
+    alert that doesn't @everyone — it's just a periodic confirmation that
+    the monitor process is alive and looping, so a silent crash or a check
+    that's been quietly failing below the alert threshold doesn't go
+    unnoticed for days.
+
+    Returns True on success, False on failure.
+    """
+    webhook_url = os.getenv("DISCORD_WEBHOOK_URL")
+    if not webhook_url:
+        return False
+
+    timestamp = datetime.utcnow().isoformat() + "Z"
+    ok_count = len(items) - len(failing)
+
+    description = f"Watching **{len(items)}** item(s) · {ok_count} OK"
+    if failing:
+        description += f" · {len(failing)} currently failing"
+
+    embed = {
+        "title": "💓 Retail Drop Monitor — heartbeat",
+        "description": description,
+        "color": 0x5865F2,
+        "footer": {"text": "Posted once every 24h to confirm the monitor is alive"},
+        "timestamp": timestamp,
+    }
+
+    payload = {"embeds": [embed]}
+
+    try:
+        resp = requests.post(webhook_url, json=payload, timeout=10)
+        resp.raise_for_status()
+        print(f"  [Discord] ✅ Heartbeat sent")
+        return True
+    except requests.RequestException as e:
+        print(f"  [Discord] ❌ Heartbeat failed: {e}")
         return False

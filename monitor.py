@@ -17,6 +17,7 @@ Requirements:
 import argparse
 import json
 import os
+import random
 import sys
 import time
 from datetime import datetime
@@ -30,12 +31,35 @@ from alerts import discord_webhook
 # blocked, timeout, parse failure, etc.) rather than a normal "not in stock".
 FAILURE_MARKERS = ("error", "failed", "timed out", "could not retrieve", "maintenance")
 
+# How much to randomly vary each item's polling interval, as a fraction of
+# its base interval (e.g. 0.15 = +/- 15%). Keeps requests from settling into
+# a predictable lockstep cadence.
+JITTER_FRACTION = 0.15
+
+# Minimum/maximum gap (seconds) enforced between two checks hitting the same
+# retailer back-to-back, even if their schedules land in the same tick. This
+# is the actual "stagger" — it spreads out a burst of due items for one
+# retailer instead of firing them all in the same instant.
+INTER_ITEM_DELAY_RANGE = (1.5, 5.0)
+
+# How often the scheduler wakes up to see what's due.
+TICK_SECONDS = 1.0
+
+# How many consecutive failed checks an item needs before we send a
+# "check is failing" alert. A single timeout/blip is normal noise; only
+# a run of these means the check is actually broken.
+CONSECUTIVE_FAILURE_THRESHOLD = 3
+
+# How often to post a "still alive" heartbeat to Discord, so a silent
+# monitor (crashed, or quietly failing every check) doesn't go unnoticed.
+HEARTBEAT_INTERVAL_SECONDS = 24 * 60 * 60
+
 
 def _is_failure(result) -> bool:
     text = f"{result.product_name} {result.note or ''}".lower()
     return any(marker in text for marker in FAILURE_MARKERS)
 
-# Load .env file (Discord webhook, Twilio credentials, Best Buy API key)
+# Load .env file (Discord webhook, Twilio credentials)
 load_dotenv()
 
 CONFIG_FILE = os.path.join(os.path.dirname(__file__), "config.json")
@@ -98,14 +122,53 @@ def test_alerts():
     print("\n✅ Test complete. Check Discord, your phone, and listen for the alarm.")
 
 
+def _item_id(item: dict) -> str:
+    retailer_key = item.get("retailer")
+    return f"{retailer_key}:{item.get('identifier', item.get('name', ''))}"
+
+
+def _base_interval(item: dict, retailer, release_mode: bool, release_interval: int) -> float:
+    """
+    The "ideal" interval for this item, before jitter.
+
+    - Release mode: use the global release interval, unless the item
+      explicitly overrides it via "release_poll_interval_seconds".
+    - Normal mode: use the item's own "poll_interval_seconds" if set,
+      otherwise fall back to the retailer module's default_poll_interval.
+      This is what makes polling per-retailer — Pokemon Center/Best Buy
+      get hit more often than the slower, stricter retailers like Walmart.
+    """
+    if release_mode:
+        return item.get("release_poll_interval_seconds", release_interval)
+    return item.get(
+        "poll_interval_seconds",
+        getattr(retailer, "default_poll_interval", 60),
+    )
+
+
+def _jittered(interval: float) -> float:
+    """Apply +/- JITTER_FRACTION randomness so checks don't lock into a
+    perfectly predictable cadence (and so multiple items with the same
+    base interval drift apart over time)."""
+    spread = interval * JITTER_FRACTION
+    return max(1.0, interval + random.uniform(-spread, spread))
+
+
 def run_monitor(config: dict, release_mode: bool = False):
-    """Main polling loop."""
+    """
+    Main polling loop.
+
+    Each watchlist item is scheduled independently based on its retailer's
+    polling interval (see _base_interval), with random jitter applied.
+    Items start at a random offset within their first interval so the whole
+    watchlist doesn't fire in one synchronized burst, and if multiple items
+    for the *same* retailer become due at the same tick, a short randomized
+    delay is inserted between their requests (INTER_ITEM_DELAY_RANGE) so we
+    never hammer one site with simultaneous requests.
+    """
     watchlist = config["watchlist"]
     settings = config.get("settings", {})
-
-    normal_interval = settings.get("poll_interval_seconds", 60)
     release_interval = settings.get("release_mode_interval_seconds", 10)
-    poll_interval = release_interval if release_mode else normal_interval
 
     # Track which items are already known to be in stock
     # so we don't spam alerts every poll cycle
@@ -115,60 +178,128 @@ def run_monitor(config: dict, release_mode: bool = False):
     # errors, timeouts, etc.) so we alert once on failure and once on recovery
     failing: set = set()
 
+    # Consecutive failed-check counters per item, so a single transient
+    # blip doesn't trigger a "FAILING" alert (see CONSECUTIVE_FAILURE_THRESHOLD)
+    failure_counts: dict = {}
+
+    # Last time we posted a heartbeat to Discord
+    last_heartbeat = time.monotonic()
+
     retailer_instances = build_retailer_instances(watchlist)
+
+    # Build the per-item schedule. `next_check[item_id]` is a monotonic
+    # timestamp; items start at a random point within their first interval
+    # so retailers naturally fan out instead of all firing at t=0.
+    now = time.monotonic()
+    next_check: dict = {}
+    valid_items = []
+    for item in watchlist:
+        retailer_key = item.get("retailer")
+        retailer = retailer_instances.get(retailer_key)
+        if not retailer:
+            continue
+        valid_items.append(item)
+        item_id = _item_id(item)
+        base = _base_interval(item, retailer, release_mode, release_interval)
+        next_check[item_id] = now + random.uniform(0, base)
 
     mode_label = "🚀 RELEASE MODE" if release_mode else "📡 Normal mode"
     print(f"\n{'='*60}")
     print(f"  Retail Drop Monitor — {mode_label}")
-    print(f"  Watching {len(watchlist)} item(s) · Polling every {poll_interval}s")
+    print(f"  Watching {len(valid_items)} item(s) · staggered per-retailer polling")
+    for item in valid_items:
+        retailer = retailer_instances.get(item.get("retailer"))
+        base = _base_interval(item, retailer, release_mode, release_interval)
+        print(f"    · {item.get('name', '?')} — ~{base:.0f}s (±{JITTER_FRACTION*100:.0f}%)")
     print(f"  Press Ctrl+C to stop")
+    print(f"{'-'*60}")
+    print(f"  Quick reference:")
+    print(f"    cd ~/Documents/retail-drop-monitor")
+    print(f"    python3 monitor.py                  # normal mode (this)")
+    print(f"    python3 monitor.py --release-mode   # 10s polling during a known drop")
+    print(f"    python3 monitor.py --test-alerts    # fire a test alert on all channels")
     print(f"{'='*60}\n")
 
-    while True:
-        timestamp = datetime.now().strftime("%H:%M:%S")
-        print(f"[{timestamp}] Checking {len(watchlist)} item(s)...")
+    # Tracks the last time each retailer key was actually hit, so we can
+    # space out same-tick checks for the same retailer.
+    last_retailer_check: dict = {}
 
-        for item in watchlist:
+    while True:
+        now = time.monotonic()
+        due_items = [item for item in valid_items if next_check[_item_id(item)] <= now]
+
+        # Check due items in schedule order so the oldest-overdue goes first
+        due_items.sort(key=lambda item: next_check[_item_id(item)])
+
+        for item in due_items:
             retailer_key = item.get("retailer")
             retailer = retailer_instances.get(retailer_key)
-            if not retailer:
-                continue
+            item_id = _item_id(item)
 
-            item_id = f"{retailer_key}:{item.get('identifier', item.get('name', ''))}"
+            # Stagger: if we just hit this same retailer, wait a bit before
+            # the next request to it.
+            last_hit = last_retailer_check.get(retailer_key)
+            if last_hit is not None:
+                gap = random.uniform(*INTER_ITEM_DELAY_RANGE)
+                elapsed = time.monotonic() - last_hit
+                if elapsed < gap:
+                    time.sleep(gap - elapsed)
+
+            timestamp = datetime.now().strftime("%H:%M:%S")
 
             try:
                 result = retailer.check_availability(item)
             except Exception as e:
-                print(f"  ⚠️  Error checking {item.get('name', '?')}: {e}")
-                if item_id not in failing:
+                print(f"[{timestamp}]   ⚠️  Error checking {item.get('name', '?')}: {e}")
+                failure_counts[item_id] = failure_counts.get(item_id, 0) + 1
+                if (
+                    item_id not in failing
+                    and failure_counts[item_id] >= CONSECUTIVE_FAILURE_THRESHOLD
+                ):
                     failing.add(item_id)
                     discord_webhook.send_status_alert(
                         retailer=retailer_key,
                         product_name=item.get("name", "?"),
                         url=item.get("url", ""),
-                        note=f"Unhandled error: {e}",
+                        note=f"Unhandled error (x{failure_counts[item_id]}): {e}",
                         recovered=False,
                     )
+                last_retailer_check[retailer_key] = time.monotonic()
+                base = _base_interval(item, retailer, release_mode, release_interval)
+                next_check[item_id] = time.monotonic() + _jittered(base)
                 continue
 
             status_icon = "✅" if result.available else "⬜"
             price_str = f"${result.price:.2f}" if result.price else ""
-            print(f"  {status_icon} [{result.retailer}] {result.product_name} {price_str}")
+            print(f"[{timestamp}]   {status_icon} [{result.retailer}] {result.product_name} {price_str}")
 
             if result.note and not result.available:
                 print(f"     → {result.note}")
 
-            # Track failure/recovery transitions and alert once on each
+            # Track failure/recovery transitions and alert once on each.
+            # A single bad check just increments a counter — only
+            # CONSECUTIVE_FAILURE_THRESHOLD in a row triggers an alert, so
+            # one timeout/blip doesn't page anyone.
             is_fail = _is_failure(result)
             was_failing = item_id in failing
-            if is_fail and not was_failing:
+
+            if is_fail:
+                failure_counts[item_id] = failure_counts.get(item_id, 0) + 1
+            else:
+                failure_counts[item_id] = 0
+
+            if (
+                is_fail
+                and not was_failing
+                and failure_counts[item_id] >= CONSECUTIVE_FAILURE_THRESHOLD
+            ):
                 failing.add(item_id)
                 print(f"  🚨 [{result.retailer}] {item.get('name', '?')} check is now FAILING")
                 discord_webhook.send_status_alert(
                     retailer=result.retailer,
                     product_name=item.get("name", result.product_name),
                     url=result.url,
-                    note=result.note,
+                    note=f"{result.note} (failed {failure_counts[item_id]}x in a row)",
                     recovered=False,
                 )
             elif not is_fail and was_failing:
@@ -191,8 +322,18 @@ def run_monitor(config: dict, release_mode: bool = False):
                 alerted.discard(item_id)
                 print(f"  ↩️  [{result.retailer}] {result.product_name} is back out of stock")
 
-        print(f"  Next check in {poll_interval}s...\n")
-        time.sleep(poll_interval)
+            # Reschedule this item independently of all the others
+            last_retailer_check[retailer_key] = time.monotonic()
+            base = _base_interval(item, retailer, release_mode, release_interval)
+            next_check[item_id] = time.monotonic() + _jittered(base)
+
+        # Periodic "still alive" heartbeat — catches the monitor having
+        # silently died or hung without anyone noticing for a day.
+        if time.monotonic() - last_heartbeat >= HEARTBEAT_INTERVAL_SECONDS:
+            discord_webhook.send_heartbeat(valid_items, failing)
+            last_heartbeat = time.monotonic()
+
+        time.sleep(TICK_SECONDS)
 
 
 def main():

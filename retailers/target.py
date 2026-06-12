@@ -26,6 +26,24 @@ Watchlist entry format:
     "identifier": "89484558",         <-- TCIN from product URL
     "url": "https://www.target.com/p/..."
   }
+
+Optional: local store stock
+  Add a "store_id" (and optionally "zip"/"state") to also check whether a
+  specific store has it on the shelf, in addition to shippable stock:
+  {
+    "name": "...",
+    "retailer": "target",
+    "identifier": "89484558",
+    "url": "https://www.target.com/p/...",
+    "store_id": "696",      <-- Target store number (target.com/sl/.../<id>)
+    "zip": "98233",
+    "state": "WA"
+  }
+  This is based on the documented pdp_fulfillment_v1 request shape (see
+  https://gist.github.com/LumaDevelopment/f2a34a202fed6ab5a7f3a31282834943),
+  which adds store_id/store_positions_store_id/pricing_store_id/zip/state
+  params and returns a "store_options" array with per-store
+  "order_pickup" and "in_store_only" availability.
 """
 
 import requests
@@ -50,6 +68,14 @@ AVAILABLE_STATUSES = {
     "BACKORDER",
 }
 
+# Same idea, but for the per-store "order_pickup" / "in_store_only" blocks
+# inside fulfillment.store_options.
+STORE_AVAILABLE_STATUSES = {
+    "IN_STOCK",
+    "LIMITED_STOCK",
+    "LIMITED_STOCK_SEE_DETAILS",
+}
+
 
 class Target(RetailerBase):
     default_poll_interval = 45
@@ -71,6 +97,23 @@ class Target(RetailerBase):
             "key": REDSKY_API_KEY,
             "tcin": tcin,
         }
+
+        # If a store_id is configured, also ask Redsky for that store's
+        # local pickup/shelf availability (in addition to shipping).
+        store_id = item.get("store_id")
+        if store_id:
+            params.update({
+                "store_id": store_id,
+                "store_positions_store_id": store_id,
+                "has_store_positions_store_id": "true",
+                "pricing_store_id": store_id,
+                "has_pricing_store_id": "true",
+                "is_bot": "false",
+            })
+            if item.get("zip"):
+                params["zip"] = item["zip"]
+            if item.get("state"):
+                params["state"] = item["state"]
 
         try:
             resp = requests.get(
@@ -145,19 +188,38 @@ class Target(RetailerBase):
                     ),
                 )
 
-            available = availability in AVAILABLE_STATUSES
+            shipping_available = availability in AVAILABLE_STATUSES
             readable = availability.replace("_", " ").title()
 
             qty_str = ""
             if qty is not None:
                 qty_str = f", {qty} available to ship" if qty else ", 0 available to ship"
 
-            reason_str = f" ({reason})" if reason and not available else ""
+            reason_str = f" ({reason})" if reason and not shipping_available else ""
+
+            shipping_note = (
+                f"Shippable — GO GO GO (status: {readable}{qty_str})"
+                if shipping_available
+                else f"Not shippable (Target status: {readable}{qty_str}{reason_str})"
+            )
+
+            # --- Local store stock (only present if store_id was requested) ---
+            store_available = False
+            store_note = None
+            if store_id:
+                store_note, store_available = self._parse_store_option(
+                    fulfillment, store_id
+                )
+
+            available = shipping_available or store_available
+
+            if store_note:
+                note = f"{shipping_note} | {store_note}"
+            else:
+                note = shipping_note
 
             if available:
-                note = f"In stock/preorder open — GO GO GO (status: {readable}{qty_str})"
-            else:
-                note = f"Not available yet (Target status: {readable}{qty_str}{reason_str})"
+                note = f"GO GO GO — {note}"
 
             return StockResult(
                 available=available,
@@ -177,3 +239,46 @@ class Target(RetailerBase):
                 price=None,
                 note=f"Request error: {e}",
             )
+
+    @staticmethod
+    def _parse_store_option(fulfillment: dict, store_id: str) -> tuple:
+        """
+        Pull this store's entry out of fulfillment.store_options and report
+        on order pickup ("ship to store / order online, pick up in store")
+        and in-store-only (on the shelf right now) availability.
+
+        Returns (note_str, available_bool).
+        """
+        store_options = fulfillment.get("store_options", [])
+        store = next(
+            (s for s in store_options if str(s.get("location_id")) == str(store_id)),
+            None,
+        )
+
+        if store is None:
+            return (
+                f"Store {store_id}: not in store_options response "
+                f"({len(store_options)} store(s) returned — check store_id/zip/state)",
+                False,
+            )
+
+        location_name = store.get("location_name", store_id)
+        qty = store.get("location_available_to_promise_quantity")
+
+        pickup_status = (store.get("order_pickup") or {}).get("availability_status")
+        shelf_status = (store.get("in_store_only") or {}).get("availability_status")
+
+        pickup_ok = pickup_status in STORE_AVAILABLE_STATUSES
+        shelf_ok = shelf_status in STORE_AVAILABLE_STATUSES
+        available = pickup_ok or shelf_ok
+
+        parts = []
+        if pickup_status:
+            parts.append(f"pickup: {pickup_status.replace('_', ' ').title()}")
+        if shelf_status:
+            parts.append(f"on shelf: {shelf_status.replace('_', ' ').title()}")
+        if qty is not None:
+            parts.append(f"qty: {qty}")
+
+        detail = ", ".join(parts) if parts else "no pickup/shelf data"
+        return f"{location_name} (#{store_id}): {detail}", available

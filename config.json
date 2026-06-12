@@ -14,29 +14,41 @@
     },
 
     {
-      "_comment": "--- TARGET ---",
+      "_comment": "--- TARGET --- store_id 696 = Cascade Mall Dr, Burlington, WA",
       "name": "Pokemon 30th Anniversary Elite Trainer Box",
       "retailer": "target",
       "identifier": "1010892076",
-      "url": "https://www.target.com/p/moo/A-1010892076"
+      "url": "https://www.target.com/p/moo/A-1010892076",
+      "store_id": "696",
+      "zip": "98233",
+      "state": "WA"
     },
     {
       "name": "Pokemon 30th Anniversary EX Tin",
       "retailer": "target",
       "identifier": "1010892069",
-      "url": "https://www.target.com/p/moo/A-1010892069"
+      "url": "https://www.target.com/p/moo/A-1010892069",
+      "store_id": "696",
+      "zip": "98233",
+      "state": "WA"
     },
     {
       "name": "Pokemon 30th Anniversary EX Box 1",
       "retailer": "target",
       "identifier": "1010892068",
-      "url": "https://www.target.com/p/moo/A-1010892068"
+      "url": "https://www.target.com/p/moo/A-1010892068",
+      "store_id": "696",
+      "zip": "98233",
+      "state": "WA"
     },
     {
       "name": "Pokemon 30th Anniversary EX Box 2",
       "retailer": "target",
       "identifier": "1010892065",
-      "url": "https://www.target.com/p/moo/A-1010892065"
+      "url": "https://www.target.com/p/moo/A-1010892065",
+      "store_id": "696",
+      "zip": "98233",
+      "state": "WA"
     },
 
     {

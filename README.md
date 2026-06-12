@@ -19,7 +19,7 @@ Hits each retailer's **internal inventory API directly** (the same endpoint thei
 
 | Retailer | Method | What it watches |
 |---|---|---|
-| **Target** | Internal fulfillment API (`api.target.com`) | Specific products by TCIN |
+| **Target** | Redsky fulfillment API (`redsky.target.com`) | Specific products by TCIN, plus optional local store pickup/shelf stock |
 | **Pokémon Center** | Product API + sitemap index | Specific products + unannounced drops |
 | **Best Buy** | Internal product badging API | Specific products by SKU |
 | **Walmart** | `__NEXT_DATA__` JSON extraction | Specific products by item ID |
@@ -32,11 +32,15 @@ Hits each retailer's **internal inventory API directly** (the same endpoint thei
 ## Features
 
 - **Target internal API** — hits the same fulfillment endpoint the Target app uses, no HTML parsing
+- **Target local store stock** — optionally checks a specific store's pickup/shelf availability (`store_id`/`zip`/`state`) alongside shippable stock
 - **Pokémon Center sitemap watcher** — monitors 33,000+ product URLs for new additions before the drop page goes public
 - **Premium Bandai integration** — watches specific items, series listings, pre-orders, and lottery/drawing openings across p-bandai.com
 - **3-channel alerts** — Discord webhook (phone + desktop), macOS native notification, and audio alarm fire simultaneously
+- **Staggered per-retailer polling** — each item is scheduled independently with jitter and randomized inter-request delays, so requests never fire in a synchronized burst
 - **Release mode** — `--release-mode` flag switches to 10-second polling during known drop windows
 - **Smart deduplication** — alerts once when in-stock, resets when it goes back out. No spam.
+- **Failure threshold + recovery alerts** — only pages you after 3 consecutive failed checks, then again when it recovers
+- **Daily heartbeat** — a quiet Discord embed every 24h confirming the monitor is alive and how many checks are healthy
 - **Auto-restart** — macOS LaunchAgent keeps it running 24/7, restarts on crash, starts at login
 
 ---
@@ -204,6 +208,13 @@ Pokémon Center registers new products in their XML sitemap **before** the drop 
 This monitor alerts you to drops and restocks, it does not guarantee a checkout against dedicated bot networks. The monitor also alerts you (separately, via Discord) if a check itself starts failing or recovers, so problems do not sit silently in the terminal.
 
 See [LIMITATIONS.md](LIMITATIONS.md) for details, including what went wrong during the Pitch Black drop and how it was fixed.
+
+---
+
+## Credits
+
+- **Target Redsky API** — the `product_fulfillment_v1`/`pdp_fulfillment_v1` request shape (including the `store_id`/`store_positions_store_id`/`pricing_store_id`/`zip`/`state` params used for local store stock) and the public Redsky API key are documented by community stock-bot projects, notably [this pdp_fulfillment_v1 gist](https://gist.github.com/LumaDevelopment/f2a34a202fed6ab5a7f3a31282834943). Target can rotate or rate-limit this key at any time.
+- **Reliability patterns** — the consecutive-failure threshold and daily heartbeat alert were inspired by patterns common in open-source restock monitors such as [inventory-hunter](https://github.com/EricJMarti/inventory-hunter) and [product-checker](https://github.com/tnware/product-checker).
 
 ---
 
