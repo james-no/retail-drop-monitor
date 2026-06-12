@@ -81,16 +81,52 @@ class Target(RetailerBase):
             product = data.get("product", {})
             fulfillment = product.get("fulfillment", {})
             shipping = fulfillment.get("shipping_options", {})
-            availability = shipping.get("availability_status", "UNAVAILABLE")
+            availability = shipping.get("availability_status")
 
-            # Target uses these status strings
-            available = availability in ("IN_STOCK", "LIMITED_STOCK", "AVAILABLE")
+            if availability is None:
+                # Response came back but didn't have the shape we expect —
+                # surface that instead of silently treating it as unavailable
+                return StockResult(
+                    available=False,
+                    retailer="Target",
+                    product_name=name,
+                    url=url,
+                    price=None,
+                    note=(
+                        "Unexpected API response — no shipping availability_status found "
+                        f"(top-level keys: {list(data.keys())}, "
+                        f"product keys: {list(product.keys())}, "
+                        f"fulfillment keys: {list(fulfillment.keys())})"
+                    ),
+                )
+
+            # Statuses that mean "you can actually buy/preorder this right now".
+            # PRE_ORDER_SELLABLE = preorder window is open and sellable.
+            AVAILABLE_STATUSES = {
+                "IN_STOCK",
+                "LIMITED_STOCK",
+                "LIMITED_STOCK_SEE_DETAILS",
+                "AVAILABLE",
+                "PRE_ORDER_SELLABLE",
+                "PREORDER_SELLABLE",
+                "BACKORDER",
+            }
+
+            available = availability in AVAILABLE_STATUSES
 
             # Try to get price from the price summary block
             price_block = product.get("price", {})
             price = price_block.get("current_retail")
 
-            note = availability.replace("_", " ").title() if available else None
+            # Always report the raw status so it's clear what Target is
+            # currently returning (e.g. PRE_ORDER_UNSELLABLE vs OUT_OF_STOCK
+            # vs UNAVAILABLE) instead of going silent when not available.
+            readable = availability.replace("_", " ").title()
+            note = (
+                f"In stock/preorder open — GO GO GO (status: {readable})"
+                if available
+                else f"Not available yet (Target status: {readable})"
+            )
 
             return StockResult(
                 available=available,
