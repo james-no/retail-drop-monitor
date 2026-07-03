@@ -1,7 +1,11 @@
 {
   "settings": {
     "poll_interval_seconds": 60,
-    "release_mode_interval_seconds": 10
+    "release_mode_interval_seconds": 10,
+    "_comment_drop_windows": "Add time windows where the monitor auto-switches to fast polling (release mode). Days: monday-sunday. Times are local machine time (24h).",
+    "drop_windows": [
+      {"days": ["monday", "tuesday", "wednesday", "thursday", "friday"], "start": "07:00", "end": "12:00"}
+    ]
   },
   "watchlist": [
     {
@@ -10,69 +14,11 @@
       "retailer": "pokemon_center_sitemap",
       "identifier": "sitemap",
       "url": "https://www.pokemoncenter.com/sitemap.xml",
-      "keywords": ["30th", "anniversary", "elite-trainer", "booster-bundle"]
+      "keywords": ["30th", "anniversary", "elite-trainer", "booster-bundle", "espeon", "umbreon", "30th-celebration", "premium-deck", "premium-collection"]
     },
 
     {
-      "_comment": "--- TARGET --- store_id 696 = Cascade Mall Dr, Burlington, WA",
-      "name": "Pokemon 30th Anniversary Elite Trainer Box",
-      "retailer": "target",
-      "identifier": "1010892076",
-      "url": "https://www.target.com/p/moo/A-1010892076",
-      "store_id": "696",
-      "zip": "98233",
-      "state": "WA"
-    },
-    {
-      "name": "Pokemon 30th Anniversary EX Tin",
-      "retailer": "target",
-      "identifier": "1010892069",
-      "url": "https://www.target.com/p/moo/A-1010892069",
-      "store_id": "696",
-      "zip": "98233",
-      "state": "WA"
-    },
-    {
-      "name": "Pokemon 30th Anniversary EX Box 1",
-      "retailer": "target",
-      "identifier": "1010892068",
-      "url": "https://www.target.com/p/moo/A-1010892068",
-      "store_id": "696",
-      "zip": "98233",
-      "state": "WA"
-    },
-    {
-      "name": "Pokemon 30th Anniversary EX Box 2",
-      "retailer": "target",
-      "identifier": "1010892065",
-      "url": "https://www.target.com/p/moo/A-1010892065",
-      "store_id": "696",
-      "zip": "98233",
-      "state": "WA"
-    },
-
-    {
-      "_comment": "--- PREMIUM BANDAI (p-bandai.com) ---",
-      "name": "One Piece Card Game Memorial Collection (N2888744001)",
-      "retailer": "premium_bandai",
-      "identifier": "N2888744001",
-      "url": "https://p-bandai.com/us/item/N2888744001"
-    },
-    {
-      "_comment": "Lottery item — alerts when drawing opens",
-      "name": "One Piece — Lottery Item (N2835216003)",
-      "retailer": "premium_bandai",
-      "identifier": "N2835216003",
-      "url": "https://p-bandai.com/us/item/N2835216003"
-    },
-    {
-      "_comment": "Standard pre-order — alerts when pre-order opens",
-      "name": "One Piece — Standard Item (N2835216004)",
-      "retailer": "premium_bandai",
-      "identifier": "N2835216004",
-      "url": "https://p-bandai.com/us/item/N2835216004"
-    },
-    {
+      "_comment": "--- PREMIUM BANDAI — fires when new One Piece or Digimon products are uploaded ---",
       "name": "One Piece Card Game — New Drops (Bandai Card Shop)",
       "retailer": "premium_bandai_series",
       "identifier": "series:03-002|shop:05-0004",
@@ -86,11 +32,12 @@
     },
 
     {
-      "_comment": "--- SQUARE ENIX STORE ---",
-      "name": "Final Fantasy Resonance Collector's Edition Goods Box",
-      "retailer": "square_enix",
-      "identifier": "final-fantasy-resonance-collector_s-edition-goods-box",
-      "url": "https://na.store.square-enix-games.com/final-fantasy-resonance-collector_s-edition-goods-box"
+      "_comment": "--- PLAZA JAPAN — BigCommerce store, watches Pokemon TCG booster box page for new listings and restocks ---",
+      "name": "Plaza Japan — Pokemon TCG Booster Boxes",
+      "retailer": "plaza_japan",
+      "identifier": "pokemon-tcg-booster",
+      "url": "https://www.plazajapan.com/pokemon/pokemon-card-game-booster-boxes/",
+      "keywords": ["30th", "anniversary", "elite trainer", "etb", "booster box", "espeon", "umbreon", "premium collection", "ultra premium"]
     }
   ]
 }
