@@ -37,7 +37,7 @@
       "retailer": "plaza_japan",
       "identifier": "pokemon-tcg-booster",
       "url": "https://www.plazajapan.com/pokemon/pokemon-card-game-booster-boxes/",
-      "keywords": ["30th", "anniversary", "elite trainer", "etb", "booster box", "espeon", "umbreon", "premium collection", "ultra premium"]
+      "keywords": ["30th", "anniversary", "espeon", "umbreon", "premium", "special", "gift", "collection", "celebration"]
     },
     {
       "_comment": "--- PLAZA JAPAN — watches Pokemon TCG accessories (sleeves, deck boxes, binders, etc.) ---",
@@ -45,7 +45,7 @@
       "retailer": "plaza_japan",
       "identifier": "pokemon-tcg-accessories",
       "url": "https://www.plazajapan.com/pokemon/pokemon-card-game-accessories/",
-      "keywords": ["30th", "anniversary", "espeon", "umbreon", "elite trainer", "premium", "ultra premium"]
+      "keywords": ["30th", "anniversary", "espeon", "umbreon", "premium", "special", "collection", "celebration"]
     }
   ]
 }
