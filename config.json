@@ -32,12 +32,20 @@
     },
 
     {
-      "_comment": "--- PLAZA JAPAN — BigCommerce store, watches Pokemon TCG booster box page for new listings and restocks ---",
+      "_comment": "--- PLAZA JAPAN — watches Pokemon TCG booster boxes (ETBs, UPCs, sets) ---",
       "name": "Plaza Japan — Pokemon TCG Booster Boxes",
       "retailer": "plaza_japan",
       "identifier": "pokemon-tcg-booster",
       "url": "https://www.plazajapan.com/pokemon/pokemon-card-game-booster-boxes/",
       "keywords": ["30th", "anniversary", "elite trainer", "etb", "booster box", "espeon", "umbreon", "premium collection", "ultra premium"]
+    },
+    {
+      "_comment": "--- PLAZA JAPAN — watches Pokemon TCG accessories (sleeves, deck boxes, binders, etc.) ---",
+      "name": "Plaza Japan — Pokemon TCG Accessories",
+      "retailer": "plaza_japan",
+      "identifier": "pokemon-tcg-accessories",
+      "url": "https://www.plazajapan.com/pokemon/pokemon-card-game-accessories/",
+      "keywords": ["30th", "anniversary", "espeon", "umbreon", "elite trainer", "premium", "ultra premium"]
     }
   ]
 }
