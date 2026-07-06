@@ -263,14 +263,16 @@ class PokemonCenter(RetailerBase):
 
 class PokemonCenterSitemap(RetailerBase):
     """
-    Watches the Pokemon Center sitemap for NEW product URLs.
-    Fires an alert when a URL appears that wasn't there last check.
-    This is your early-warning system for unannounced drops.
+    Watches the Pokemon Center sitemap for NEW and RESTOCKED product URLs.
+    Fires an alert when a URL appears that wasn't there last check (new drop),
+    or when a URL that previously disappeared comes back (restock).
+    This is your early-warning system — sitemap updates before pages go live.
     """
-    default_poll_interval = 60
+    default_poll_interval = 30
 
     def __init__(self):
-        self._known_urls: set = set()
+        self._known_urls: set = set()       # last snapshot
+        self._disappeared_urls: set = set() # URLs that vanished; candidates for restock alert
         self._initialized = False
 
     def _fetch_all_product_urls(self, sitemap_url: str) -> tuple:
@@ -280,11 +282,14 @@ class PokemonCenterSitemap(RetailerBase):
         multiple child sitemaps. We follow all of them and collect
         every product URL across all child sitemaps.
 
+        Uses a short 8s timeout so failures are detected fast — a slow
+        or down Pokemon Center during a drop triggers the alert immediately.
+
         Returns (urls_or_None, error_message_or_None)
         """
         ns = {"sm": "http://www.sitemaps.org/schemas/sitemap/0.9"}
         try:
-            resp = requests.get(sitemap_url, headers=HEADERS, timeout=15)
+            resp = requests.get(sitemap_url, headers=HEADERS, timeout=8)
             if resp.status_code != 200:
                 return None, f"HTTP {resp.status_code} fetching sitemap (possible bot-block)"
             resp.raise_for_status()
@@ -305,17 +310,17 @@ class PokemonCenterSitemap(RetailerBase):
                     if not child_url:
                         continue
                     try:
-                        child_resp = requests.get(child_url, headers=HEADERS, timeout=15)
+                        child_resp = requests.get(child_url, headers=HEADERS, timeout=8)
                         if child_resp.status_code != 200:
-                            child_errors.append(f"{child_url}: HTTP {child_resp.status_code}")
+                            child_errors.append(f"HTTP {child_resp.status_code}")
                             continue
                         child_root = ET.fromstring(child_resp.content)
                         for url_loc in child_root.findall(".//sm:loc", ns):
                             url = url_loc.text.strip() if url_loc.text else ""
-                            if "/product/" in url:
+                            if "/product/" in url and "www.pokemoncenter.com" in url:
                                 all_product_urls.add(url)
                     except Exception as e:
-                        child_errors.append(f"{child_url}: {e}")
+                        child_errors.append(str(e))
                         continue  # Skip failed child sitemaps, keep going
 
                 if not all_product_urls and child_errors:
@@ -326,7 +331,7 @@ class PokemonCenterSitemap(RetailerBase):
             current_urls = set()
             for loc in root.findall(".//sm:loc", ns):
                 url = loc.text.strip() if loc.text else ""
-                if "/product/" in url:
+                if "/product/" in url and "www.pokemoncenter.com" in url:
                     current_urls.add(url)
             return current_urls, None
 
@@ -368,11 +373,16 @@ class PokemonCenterSitemap(RetailerBase):
                     note=f"Tracking {len(current_urls)} product URLs",
                 )
 
-            # Find URLs that appeared since last check
+            # URLs that just appeared (never seen before)
             new_urls = current_urls - self._known_urls
+            # URLs that disappeared last cycle but are back now (restock)
+            restocked_urls = current_urls & self._disappeared_urls
+            # URLs that just vanished this cycle — track for future restock detection
+            vanished_now = self._known_urls - current_urls
+            self._disappeared_urls = (self._disappeared_urls | vanished_now) - current_urls
             self._known_urls = current_urls
 
-            if not new_urls:
+            if not new_urls and not restocked_urls:
                 return StockResult(
                     available=False,
                     retailer="Pokémon Center (Sitemap)",
@@ -382,32 +392,43 @@ class PokemonCenterSitemap(RetailerBase):
                     note=None,
                 )
 
-            # If keyword filter is set, only alert on matching URLs
-            if keywords:
-                matching = [
-                    u for u in new_urls
-                    if any(kw.lower() in u.lower() for kw in keywords)
-                ]
-            else:
-                matching = list(new_urls)
+            def _matches(url):
+                if not keywords:
+                    return True
+                return any(kw.lower() in url.lower() for kw in keywords)
 
-            if matching:
-                # Alert on the first new URL (monitor.py will fire alerts)
-                new_url = matching[0]
-                all_new = "\n".join(matching)
+            matching_new = [u for u in new_urls if _matches(u)]
+            matching_restock = [u for u in restocked_urls if _matches(u)]
+            all_matching = matching_new + matching_restock
+
+            if all_matching:
+                label_parts = []
+                if matching_new:
+                    label_parts.append(f"{len(matching_new)} new")
+                if matching_restock:
+                    label_parts.append(f"{len(matching_restock)} restocked")
+                label = " + ".join(label_parts)
+
+                lines = []
+                for u in matching_new:
+                    lines.append(f"[NEW] {u}")
+                for u in matching_restock:
+                    lines.append(f"[RESTOCK] {u}")
+
                 return StockResult(
-                    available=True,   # "available" = new product detected
+                    available=True,
                     retailer="Pokémon Center (Sitemap)",
-                    product_name=f"NEW PRODUCT DETECTED: {len(matching)} new URL(s)",
-                    url=new_url,
+                    product_name=f"DETECTED: {label} product URL(s)",
+                    url=all_matching[0],
                     price=None,
-                    note=f"New URLs:\n{all_new}",
+                    note="\n".join(lines),
                 )
 
+            skipped = len(new_urls) + len(restocked_urls)
             return StockResult(
                 available=False,
                 retailer="Pokémon Center (Sitemap)",
-                product_name=f"{len(new_urls)} new URL(s) — no keyword match",
+                product_name=f"{skipped} URL(s) — no keyword match",
                 url=sitemap_url,
                 price=None,
                 note=None,
