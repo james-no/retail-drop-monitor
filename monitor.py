@@ -21,6 +21,9 @@ import random
 import sys
 import time
 from datetime import datetime
+from zoneinfo import ZoneInfo
+
+PST = ZoneInfo("America/Los_Angeles")
 from dotenv import load_dotenv
 
 from retailers import RETAILER_MAP
@@ -52,7 +55,7 @@ CONSECUTIVE_FAILURE_THRESHOLD = 3
 
 # How often to post a "still alive" heartbeat to Discord, so a silent
 # monitor (crashed, or quietly failing every check) doesn't go unnoticed.
-HEARTBEAT_INTERVAL_SECONDS = 24 * 60 * 60
+HEARTBEAT_INTERVAL_SECONDS = 3 * 60 * 60
 
 
 def _is_failure(result) -> bool:
@@ -154,6 +157,27 @@ def _jittered(interval: float) -> float:
     return max(1.0, interval + random.uniform(-spread, spread))
 
 
+def _in_drop_window(windows: list) -> bool:
+    """
+    Returns True if the current local time falls inside any configured
+    drop_window. Windows are defined in config.json settings.drop_windows:
+      {"days": ["friday", "saturday"], "start": "09:00", "end": "18:00"}
+    Times are local machine time (24h format).
+    """
+    if not windows:
+        return False
+    now = datetime.now(PST)
+    day_name = now.strftime("%A").lower()
+    current_time = now.strftime("%H:%M")
+    for window in windows:
+        days = [d.lower() for d in window.get("days", [])]
+        start = window.get("start", "00:00")
+        end = window.get("end", "23:59")
+        if day_name in days and start <= current_time <= end:
+            return True
+    return False
+
+
 def run_monitor(config: dict, release_mode: bool = False):
     """
     Main polling loop.
@@ -169,6 +193,7 @@ def run_monitor(config: dict, release_mode: bool = False):
     watchlist = config["watchlist"]
     settings = config.get("settings", {})
     release_interval = settings.get("release_mode_interval_seconds", 10)
+    drop_windows = settings.get("drop_windows", [])
 
     # Track which items are already known to be in stock
     # so we don't spam alerts every poll cycle
@@ -215,6 +240,7 @@ def run_monitor(config: dict, release_mode: bool = False):
     print(f"{'-'*60}")
     print(f"  Quick reference:")
     print(f"    cd ~/Documents/retail-drop-monitor")
+    print(f"    source venv/bin/activate             # do this first, every new terminal")
     print(f"    python3 monitor.py                  # normal mode (this)")
     print(f"    python3 monitor.py --release-mode   # 10s polling during a known drop")
     print(f"    python3 monitor.py --test-alerts    # fire a test alert on all channels")
@@ -230,6 +256,9 @@ def run_monitor(config: dict, release_mode: bool = False):
 
         # Check due items in schedule order so the oldest-overdue goes first
         due_items.sort(key=lambda item: next_check[_item_id(item)])
+
+        # Auto release mode — kick into fast polling during configured drop windows
+        effective_release = release_mode or _in_drop_window(drop_windows)
 
         for item in due_items:
             retailer_key = item.get("retailer")
@@ -265,16 +294,15 @@ def run_monitor(config: dict, release_mode: bool = False):
                         recovered=False,
                     )
                 last_retailer_check[retailer_key] = time.monotonic()
-                base = _base_interval(item, retailer, release_mode, release_interval)
+                base = _base_interval(item, retailer, effective_release, release_interval)
                 next_check[item_id] = time.monotonic() + _jittered(base)
                 continue
 
-            status_icon = "✅" if result.available else "⬜"
             price_str = f"${result.price:.2f}" if result.price else ""
-            print(f"[{timestamp}]   {status_icon} [{result.retailer}] {result.product_name} {price_str}")
-
-            if result.note and not result.available:
-                print(f"     → {result.note}")
+            if result.available:
+                print(f"[{timestamp}]   ✅ [{result.retailer}] {result.product_name} {price_str}")
+                if result.note:
+                    print(f"     → {result.note}")
 
             # Track failure/recovery transitions and alert once on each.
             # A single bad check just increments a counter — only
@@ -316,21 +344,35 @@ def run_monitor(config: dict, release_mode: bool = False):
             # Fire alerts if newly in stock
             if result.available and item_id not in alerted:
                 alerted.add(item_id)
+                # For sitemap detections, send an extra direct Discord ping
+                # so the new product notification is never lost after a failure alert
+                if retailer_key == "pokemon_center_sitemap":
+                    discord_webhook.send_status_alert(
+                        retailer="Pokémon Center (Sitemap)",
+                        product_name="NEW PRODUCT DETECTED — go now",
+                        url=result.url,
+                        note=result.note,
+                        recovered=False,
+                    )
                 fire_all(result)
             elif not result.available and item_id in alerted:
                 # Item went back out of stock — reset so we alert again next drop
                 alerted.discard(item_id)
                 print(f"  ↩️  [{result.retailer}] {result.product_name} is back out of stock")
 
-            # Reschedule this item independently of all the others
+            # Reschedule — re-check drop window each time so fast polling
+            # kicks in or out automatically as time windows open/close
+            effective_release = release_mode or _in_drop_window(drop_windows)
             last_retailer_check[retailer_key] = time.monotonic()
-            base = _base_interval(item, retailer, release_mode, release_interval)
+            base = _base_interval(item, retailer, effective_release, release_interval)
             next_check[item_id] = time.monotonic() + _jittered(base)
 
         # Periodic "still alive" heartbeat — catches the monitor having
         # silently died or hung without anyone noticing for a day.
         if time.monotonic() - last_heartbeat >= HEARTBEAT_INTERVAL_SECONDS:
-            discord_webhook.send_heartbeat(valid_items, failing)
+            pst_hour = datetime.now(PST).hour
+            if not (2 <= pst_hour < 6) and not (13 <= pst_hour < 17):
+                discord_webhook.send_heartbeat(valid_items, failing)
             last_heartbeat = time.monotonic()
 
         time.sleep(TICK_SECONDS)

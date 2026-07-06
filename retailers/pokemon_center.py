@@ -397,6 +397,16 @@ class PokemonCenterSitemap(RetailerBase):
                     return True
                 return any(kw.lower() in url.lower() for kw in keywords)
 
+            def _product_name(url):
+                """Extract a readable product name from the URL slug."""
+                # URL format: /product/290-86189/pokemon-tcg-30th-celebration-...
+                parts = url.rstrip("/").split("/")
+                slug = parts[-1] if parts else ""
+                # Remove leading product ID segment if the slug looks like an ID
+                if re.match(r"^\d{3}-\d+$", slug):
+                    slug = parts[-2] if len(parts) >= 2 else slug
+                return slug.replace("-", " ").title()
+
             matching_new = [u for u in new_urls if _matches(u)]
             matching_restock = [u for u in restocked_urls if _matches(u)]
             all_matching = matching_new + matching_restock
@@ -411,14 +421,14 @@ class PokemonCenterSitemap(RetailerBase):
 
                 lines = []
                 for u in matching_new:
-                    lines.append(f"[NEW] {u}")
+                    lines.append(f"[NEW] {_product_name(u)}\n  → {u}")
                 for u in matching_restock:
-                    lines.append(f"[RESTOCK] {u}")
+                    lines.append(f"[RESTOCK] {_product_name(u)}\n  → {u}")
 
                 return StockResult(
                     available=True,
                     retailer="Pokémon Center (Sitemap)",
-                    product_name=f"DETECTED: {label} product URL(s)",
+                    product_name=f"DETECTED: {label} product(s)",
                     url=all_matching[0],
                     price=None,
                     note="\n".join(lines),
