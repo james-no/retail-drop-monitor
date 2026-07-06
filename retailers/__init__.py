@@ -5,6 +5,7 @@ from .walmart import Walmart
 from .premium_bandai import PremiumBandai, PremiumBandaiSeries
 from .square_enix import SquareEnix
 from .plaza_japan import PlazaJapan
+from .amazon import Amazon
 
 # Maps the "retailer" field in config.json to the right class
 RETAILER_MAP = {
@@ -17,4 +18,5 @@ RETAILER_MAP = {
     "premium_bandai_series": PremiumBandaiSeries,
     "square_enix": SquareEnix,
     "plaza_japan": PlazaJapan,
+    "amazon": Amazon,
 }

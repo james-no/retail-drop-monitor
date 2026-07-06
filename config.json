@@ -46,6 +46,38 @@
       "identifier": "pokemon-tcg-accessories",
       "url": "https://www.plazajapan.com/pokemon/pokemon-card-game-accessories/",
       "keywords": ["30th", "anniversary", "espeon", "umbreon", "premium", "special", "collection", "celebration"]
+    },
+
+    {
+      "_comment": "--- AMAZON 30TH ANNIVERSARY ---",
+      "name": "Pokemon TCG 30th Celebration Ultra Premium Collection",
+      "retailer": "amazon",
+      "identifier": "B0H784PD4X",
+      "url": "https://www.amazon.com/dp/B0H784PD4X"
+    },
+    {
+      "name": "Pokemon TCG 30th Celebration Elite Trainer Box",
+      "retailer": "amazon",
+      "identifier": "B0H78BB9TY",
+      "url": "https://www.amazon.com/dp/B0H78BB9TY"
+    },
+    {
+      "name": "Pokemon TCG 30th Celebration Ditto Premium Collection",
+      "retailer": "amazon",
+      "identifier": "B0H7815T4Y",
+      "url": "https://www.amazon.com/dp/B0H7815T4Y"
+    },
+    {
+      "name": "Pokemon TCG 30th Celebration Mew / Mewtwo Figure Collections",
+      "retailer": "amazon",
+      "identifier": "B0H788HLPY",
+      "url": "https://www.amazon.com/dp/B0H788HLPY"
+    },
+    {
+      "name": "Pokemon TCG 30th Celebration Booster Bundle",
+      "retailer": "amazon",
+      "identifier": "B0H783FY5Z",
+      "url": "https://www.amazon.com/dp/B0H783FY5Z"
     }
   ]
 }
