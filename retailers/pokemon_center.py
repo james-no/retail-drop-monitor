@@ -317,7 +317,7 @@ class PokemonCenterSitemap(RetailerBase):
                         child_root = ET.fromstring(child_resp.content)
                         for url_loc in child_root.findall(".//sm:loc", ns):
                             url = url_loc.text.strip() if url_loc.text else ""
-                            if "/product/" in url and "www.pokemoncenter.com" in url:
+                            if "/product/" in url and "www.pokemoncenter.com" in url and "/en-" not in url:
                                 all_product_urls.add(url)
                     except Exception as e:
                         child_errors.append(str(e))
@@ -331,7 +331,7 @@ class PokemonCenterSitemap(RetailerBase):
             current_urls = set()
             for loc in root.findall(".//sm:loc", ns):
                 url = loc.text.strip() if loc.text else ""
-                if "/product/" in url and "www.pokemoncenter.com" in url:
+                if "/product/" in url and "www.pokemoncenter.com" in url and "/en-" not in url:
                     current_urls.add(url)
             return current_urls, None
 
