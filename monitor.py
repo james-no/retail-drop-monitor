@@ -274,7 +274,7 @@ def run_monitor(config: dict, release_mode: bool = False):
                 if elapsed < gap:
                     time.sleep(gap - elapsed)
 
-            timestamp = datetime.now().strftime("%H:%M:%S")
+            timestamp = datetime.now(PST).strftime("%m/%d %H:%M:%S PST")
 
             try:
                 result = retailer.check_availability(item)
@@ -322,7 +322,7 @@ def run_monitor(config: dict, release_mode: bool = False):
                 and failure_counts[item_id] >= CONSECUTIVE_FAILURE_THRESHOLD
             ):
                 failing.add(item_id)
-                print(f"  🚨 [{result.retailer}] {item.get('name', '?')} check is now FAILING")
+                print(f"[{timestamp}]   🚨 [{result.retailer}] {item.get('name', '?')} check is now FAILING")
                 discord_webhook.send_status_alert(
                     retailer=result.retailer,
                     product_name=item.get("name", result.product_name),
@@ -332,7 +332,7 @@ def run_monitor(config: dict, release_mode: bool = False):
                 )
             elif not is_fail and was_failing:
                 failing.discard(item_id)
-                print(f"  ✅ [{result.retailer}] {item.get('name', '?')} check has RECOVERED")
+                print(f"[{timestamp}]   ✅ [{result.retailer}] {item.get('name', '?')} check has RECOVERED")
                 discord_webhook.send_status_alert(
                     retailer=result.retailer,
                     product_name=item.get("name", result.product_name),
