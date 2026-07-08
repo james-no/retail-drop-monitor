@@ -34,30 +34,31 @@ def send_alert(result) -> bool:
     else:
         color = 0x00FF00
 
-    price_str = f"${result.price:.2f}" if result.price else "Check site"
+    price_str = f"${result.price:.2f}" if result.price else ""
     timestamp = datetime.utcnow().isoformat() + "Z"
 
+    # Title line: product name + price if known
+    title = result.product_name
+    if price_str:
+        title += f" — {price_str}"
+
+    fields = []
+    if result.note:
+        fields.append({"name": "📝 Note", "value": result.note[:1024], "inline": False})
+
     embed = {
-        "title": f"🚨 {result.retailer} — IN STOCK",
-        "description": f"**{result.product_name}**",
+        "title": title,
+        "description": f"**[🛒 TAP TO BUY]({result.url})**",
         "color": color,
         "url": result.url,
-        "fields": [
-            {"name": "💰 Price", "value": price_str, "inline": True},
-            {"name": "🏬 Retailer", "value": result.retailer, "inline": True},
-            {"name": "🔗 Link", "value": f"[Buy Now]({result.url})", "inline": False},
-        ],
-        "footer": {"text": "Retail Drop Monitor"},
+        "fields": fields,
+        "footer": {"text": f"Retail Drop Monitor · {result.retailer}"},
         "timestamp": timestamp,
     }
 
-    if result.note:
-        embed["fields"].append(
-            {"name": "📝 Note", "value": result.note, "inline": False}
-        )
-
+    # Bare URL in content = Discord renders a tap-to-open preview on mobile
     payload = {
-        "content": "@everyone 🔔 **DROP ALERT** — get in there!",
+        "content": f"@everyone 🚨 **IN STOCK** — {result.url}",
         "embeds": [embed],
     }
 
@@ -86,10 +87,16 @@ def send_status_alert(retailer: str, product_name: str, url: str, note: str, rec
 
     timestamp = datetime.utcnow().isoformat() + "Z"
 
+    is_pokemon_center = "pokemon" in retailer.lower()
+
     if recovered:
         title = f"✅ {retailer} — check recovered"
         color = 0x00FF00
         description = f"**{product_name}**\nThis check is working again."
+    elif is_pokemon_center:
+        title = f"🚨 Pokemon Center is going down — CHECK NOW"
+        color = 0xFF0000
+        description = f"**Site may be dropping a product right now.**\nGo to pokemoncenter.com immediately."
     else:
         title = f"⚠️ {retailer} — check is failing"
         color = 0xFF0000
