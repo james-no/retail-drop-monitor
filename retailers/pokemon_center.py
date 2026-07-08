@@ -263,16 +263,17 @@ class PokemonCenter(RetailerBase):
 
 class PokemonCenterSitemap(RetailerBase):
     """
-    Watches the Pokemon Center sitemap for NEW and RESTOCKED product URLs.
-    Fires an alert when a URL appears that wasn't there last check (new drop),
-    or when a URL that previously disappeared comes back (restock).
-    This is your early-warning system — sitemap updates before pages go live.
+    Watches the Pokemon Center sitemap for brand-new product URLs.
+    Fires an alert when a URL appears that has NEVER been seen before across
+    any poll this session. Uses a monotonically growing seen-set so transient
+    child-sitemap timeouts (which cause URLs to appear/disappear between polls)
+    never trigger false alerts.
     """
     default_poll_interval = 30
 
     def __init__(self):
-        self._known_urls: set = set()       # last snapshot
-        self._disappeared_urls: set = set() # URLs that vanished; candidates for restock alert
+        self._ever_seen: set = set()    # All URLs ever fetched — grows only, never shrinks
+        self._min_fetch_size: int = 0   # Partial-fetch guard: skip if we get fewer than this
         self._initialized = False
 
     def _fetch_all_product_urls(self, sitemap_url: str) -> tuple:
@@ -361,8 +362,10 @@ class PokemonCenterSitemap(RetailerBase):
                 )
 
             if not self._initialized:
-                # First run — just record what exists, don't alert on everything
-                self._known_urls = current_urls
+                # First run — baseline everything we see; don't alert on existing products
+                self._ever_seen = set(current_urls)
+                # Guard threshold: need at least half the baseline count to trust a fetch
+                self._min_fetch_size = max(10, len(current_urls) // 2)
                 self._initialized = True
                 return StockResult(
                     available=False,
@@ -373,16 +376,25 @@ class PokemonCenterSitemap(RetailerBase):
                     note=f"Tracking {len(current_urls)} product URLs",
                 )
 
-            # URLs that just appeared (never seen before)
-            new_urls = current_urls - self._known_urls
-            # URLs that disappeared last cycle but are back now (restock)
-            restocked_urls = current_urls & self._disappeared_urls
-            # URLs that just vanished this cycle — track for future restock detection
-            vanished_now = self._known_urls - current_urls
-            self._disappeared_urls = (self._disappeared_urls | vanished_now) - current_urls
-            self._known_urls = current_urls
+            # Partial-fetch guard: child sitemaps sometimes time out, returning far fewer
+            # URLs than normal. If we get an unusually small result, skip updating so
+            # the missing URLs don't look like they've "disappeared" and re-appear later.
+            if len(current_urls) < self._min_fetch_size:
+                return StockResult(
+                    available=False,
+                    retailer="Pokémon Center (Sitemap)",
+                    product_name="Sitemap partial fetch — skipped",
+                    url=sitemap_url,
+                    price=None,
+                    note=f"Only {len(current_urls)} URLs (expected ≥{self._min_fetch_size}) — child sitemaps probably timed out, skipping update",
+                )
 
-            if not new_urls and not restocked_urls:
+            # Only URLs that have NEVER appeared in any previous poll
+            new_urls = current_urls - self._ever_seen
+            # Grow the seen set monotonically — URLs never "un-seen"
+            self._ever_seen |= current_urls
+
+            if not new_urls:
                 return StockResult(
                     available=False,
                     retailer="Pokémon Center (Sitemap)",
@@ -399,46 +411,33 @@ class PokemonCenterSitemap(RetailerBase):
 
             def _product_name(url):
                 """Extract a readable product name from the URL slug."""
-                # URL format: /product/290-86189/pokemon-tcg-30th-celebration-...
                 parts = url.rstrip("/").split("/")
                 slug = parts[-1] if parts else ""
-                # Remove leading product ID segment if the slug looks like an ID
                 if re.match(r"^\d{3}-\d+$", slug):
                     slug = parts[-2] if len(parts) >= 2 else slug
                 return slug.replace("-", " ").title()
 
             matching_new = [u for u in new_urls if _matches(u)]
-            matching_restock = [u for u in restocked_urls if _matches(u)]
-            all_matching = matching_new + matching_restock
 
-            if all_matching:
-                label_parts = []
-                if matching_new:
-                    label_parts.append(f"{len(matching_new)} new")
-                if matching_restock:
-                    label_parts.append(f"{len(matching_restock)} restocked")
-                label = " + ".join(label_parts)
-
+            if matching_new:
                 lines = []
                 for u in matching_new:
                     lines.append(f"[NEW] {_product_name(u)}\n  → {u}")
-                for u in matching_restock:
-                    lines.append(f"[RESTOCK] {_product_name(u)}\n  → {u}")
 
                 return StockResult(
                     available=True,
                     retailer="Pokémon Center (Sitemap)",
-                    product_name=f"DETECTED: {label} product(s)",
-                    url=all_matching[0],
+                    product_name=f"DETECTED: {len(matching_new)} new product(s)",
+                    url=matching_new[0],
                     price=None,
                     note="\n".join(lines),
                 )
 
-            skipped = len(new_urls) + len(restocked_urls)
+            skipped = len(new_urls)
             return StockResult(
                 available=False,
                 retailer="Pokémon Center (Sitemap)",
-                product_name=f"{skipped} URL(s) — no keyword match",
+                product_name=f"{skipped} new URL(s) — no keyword match",
                 url=sitemap_url,
                 price=None,
                 note=None,
