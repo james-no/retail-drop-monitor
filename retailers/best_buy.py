@@ -126,6 +126,15 @@ class BestBuy(RetailerBase):
                 note="HTML fallback" if available else None,
             )
 
+        except requests.exceptions.Timeout:
+            return StockResult(
+                available=False,
+                retailer="Best Buy",
+                product_name=name,
+                url=url,
+                price=None,
+                note="Best Buy rate-limiting — will retry next poll",
+            )
         except Exception as e:
             return StockResult(
                 available=False,
@@ -133,5 +142,5 @@ class BestBuy(RetailerBase):
                 product_name=name,
                 url=url,
                 price=None,
-                note=f"Page check unavailable: {e}",
+                note="Best Buy check blocked — will retry next poll",
             )
