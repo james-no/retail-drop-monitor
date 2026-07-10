@@ -133,5 +133,5 @@ class BestBuy(RetailerBase):
                 product_name=name,
                 url=url,
                 price=None,
-                note=f"All checks failed: {e}",
+                note=f"Page check unavailable: {e}",
             )
