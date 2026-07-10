@@ -244,16 +244,25 @@ def run_monitor(config: dict, release_mode: bool = False):
     mode_label = "🚀 RELEASE MODE" if release_mode else "📡 Normal mode"
     print(f"\n{'='*60}")
     print(f"  Retail Drop Monitor — {mode_label}")
-    print(f"  Watching {len(valid_items)} item(s) · staggered per-retailer polling")
+    print(f"  Watching {len(valid_items)} item(s)")
+
+    # Group items by retailer label for cleaner display
+    from collections import defaultdict
+    grouped = defaultdict(list)
     for item in valid_items:
         retailer_key = item.get("retailer")
         retailer = retailer_instances.get(retailer_key)
         base = _base_interval(item, retailer, release_mode, release_interval)
         label = RETAILER_LABELS.get(retailer_key, retailer_key)
-        url = item.get("url", "")
-        print(f"    · [{label}] {item.get('name', '?')} — ~{base:.0f}s")
-        print(f"      {url}")
-    print(f"  Press Ctrl+C to stop")
+        grouped[label].append((item, base))
+
+    for label, entries in grouped.items():
+        print(f"\n  {label.upper()}")
+        for item, base in entries:
+            print(f"    · {item.get('name', '?')} — ~{base:.0f}s")
+            print(f"      {item.get('url', '')}")
+
+    print(f"\n  Press Ctrl+C to stop")
     print(f"{'-'*60}")
     print(f"  Quick reference:")
     print(f"    cd ~/Documents/retail-drop-monitor")
