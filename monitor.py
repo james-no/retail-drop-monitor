@@ -228,14 +228,31 @@ def run_monitor(config: dict, release_mode: bool = False):
         base = _base_interval(item, retailer, release_mode, release_interval)
         next_check[item_id] = now + random.uniform(0, base)
 
+    RETAILER_LABELS = {
+        "amazon": "Amazon",
+        "best_buy": "Best Buy",
+        "target": "Target",
+        "walmart": "Walmart",
+        "pokemon_center": "Pokemon Center",
+        "pokemon_center_sitemap": "Pokemon Center",
+        "premium_bandai": "Bandai",
+        "premium_bandai_series": "Bandai",
+        "plaza_japan": "Plaza Japan",
+        "square_enix": "Square Enix",
+    }
+
     mode_label = "🚀 RELEASE MODE" if release_mode else "📡 Normal mode"
     print(f"\n{'='*60}")
     print(f"  Retail Drop Monitor — {mode_label}")
     print(f"  Watching {len(valid_items)} item(s) · staggered per-retailer polling")
     for item in valid_items:
-        retailer = retailer_instances.get(item.get("retailer"))
+        retailer_key = item.get("retailer")
+        retailer = retailer_instances.get(retailer_key)
         base = _base_interval(item, retailer, release_mode, release_interval)
-        print(f"    · {item.get('name', '?')} — ~{base:.0f}s (±{JITTER_FRACTION*100:.0f}%)")
+        label = RETAILER_LABELS.get(retailer_key, retailer_key)
+        url = item.get("url", "")
+        print(f"    · [{label}] {item.get('name', '?')} — ~{base:.0f}s")
+        print(f"      {url}")
     print(f"  Press Ctrl+C to stop")
     print(f"{'-'*60}")
     print(f"  Quick reference:")
