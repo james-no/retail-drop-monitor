@@ -44,10 +44,15 @@ HEADERS = {
 }
 
 IN_STOCK_SIGNALS = [
+    "in stock",
     "add to cart",
     "buy now",
-    "in stock",
-    "only",  # "only X left in stock"
+    "pre-order now",
+    "preorder now",
+    "order now",
+    "ships on",
+    "ships from and sold by amazon",
+    "available for pre-order",
 ]
 
 OUT_OF_STOCK_SIGNALS = [
@@ -56,6 +61,10 @@ OUT_OF_STOCK_SIGNALS = [
     "out of stock",
     "we don't know when or if this item will be back in stock",
     "sign up to be notified",
+    # Third-party only — Amazon itself doesn't have stock
+    "available from these sellers",
+    "see all buying options",
+    "new & used",
 ]
 
 BLOCK_SIGNALS = [
@@ -144,35 +153,86 @@ class Amazon(RetailerBase):
                 except ValueError:
                     pass
 
-            # Check availability signals
-            if any(sig in html_lower for sig in OUT_OF_STOCK_SIGNALS):
-                return StockResult(
-                    available=False,
-                    retailer="Amazon",
-                    product_name=name,
-                    url=url,
-                    price=price,
-                    note=None,
-                )
+            # Only trust the #availability buy box div.
+            # Never scan the full page — "add to cart" / "in stock" appear
+            # everywhere in carousels, descriptions, and recommendations.
+            avail_match = re.search(
+                r'id="availability"[^>]*>(.*?)</div>',
+                html,
+                re.IGNORECASE | re.DOTALL,
+            )
+            if avail_match:
+                avail_block = avail_match.group(1).lower()
+                # Strip HTML tags to get plain text
+                avail_text = re.sub(r'<[^>]+>', ' ', avail_block).strip()
+                # Explicit unavailable — stop here
+                if any(sig in avail_text for sig in OUT_OF_STOCK_SIGNALS):
+                    return StockResult(
+                        available=False,
+                        retailer="Amazon",
+                        product_name=name,
+                        url=url,
+                        price=price,
+                        note=None,
+                    )
+                # Check all in-stock signals (covers preorders, buy now, ships on, etc.)
+                matched = next((sig for sig in IN_STOCK_SIGNALS if sig in avail_text), None)
+                if matched:
+                    note = "Pre-order is LIVE on Amazon — GO NOW" if "pre" in matched or "ships on" in matched or "order" in matched else "In stock on Amazon — GO GO GO"
 
-            if any(sig in html_lower for sig in IN_STOCK_SIGNALS):
-                return StockResult(
-                    available=True,
-                    retailer="Amazon",
-                    product_name=name,
-                    url=url,
-                    price=price,
-                    note="In stock on Amazon — GO GO GO",
-                )
+                    # Check if item requires Amazon/Pokemon direct (not marketplace)
+                    amazon_direct_only = item.get("amazon_direct_only", False)
+                    if amazon_direct_only:
+                        merchant_match = re.search(
+                            r'id="merchant-info"[^>]*>(.*?)</div>',
+                            html, re.IGNORECASE | re.DOTALL,
+                        )
+                        merchant_text = ""
+                        if merchant_match:
+                            merchant_text = re.sub(r'<[^>]+>', ' ', merchant_match.group(1)).lower().strip()
+                        sold_by_amazon = any(s in merchant_text for s in [
+                            "amazon.com", "amazon", "pokemon", "the pokemon company"
+                        ])
+                        # If merchant info is present and not Amazon/Pokemon, skip
+                        if merchant_text and not sold_by_amazon:
+                            return StockResult(
+                                available=False,
+                                retailer="Amazon",
+                                product_name=name,
+                                url=url,
+                                price=price,
+                                note=f"In stock but sold by third party ({merchant_text[:60]}) — skipping",
+                            )
 
-            # Ambiguous — page loaded but we can't tell stock status
+                    # Price cap check
+                    max_price = item.get("max_price")
+                    if max_price and price and price > max_price:
+                        return StockResult(
+                            available=False,
+                            retailer="Amazon",
+                            product_name=name,
+                            url=url,
+                            price=price,
+                            note=f"In stock but price ${price:.2f} exceeds limit ${max_price:.2f} — skipping",
+                        )
+
+                    return StockResult(
+                        available=True,
+                        retailer="Amazon",
+                        product_name=name,
+                        url=url,
+                        price=price,
+                        note=note,
+                    )
+
+            # No #availability div found or status unclear — treat as unavailable.
             return StockResult(
                 available=False,
                 retailer="Amazon",
                 product_name=name,
                 url=url,
                 price=None,
-                note="Page loaded but availability unclear — verify manually",
+                note=None,
             )
 
         except requests.exceptions.Timeout:

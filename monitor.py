@@ -26,6 +26,14 @@ from zoneinfo import ZoneInfo
 PST = ZoneInfo("America/Los_Angeles")
 from dotenv import load_dotenv
 
+BOLD    = "\033[1m"
+RESET   = "\033[0m"
+DIM     = "\033[90m"   # timestamps
+CYAN    = "\033[96m"   # retailer names
+YELLOW  = "\033[1;93m" # product names
+GREEN   = "\033[1;92m" # in stock / recovered
+RED     = "\033[1;91m" # failing
+
 from retailers import RETAILER_MAP
 from alerts import fire_all
 from alerts import discord_webhook
@@ -56,6 +64,9 @@ CONSECUTIVE_FAILURE_THRESHOLD = 3
 # How often to post a "still alive" heartbeat to Discord, so a silent
 # monitor (crashed, or quietly failing every check) doesn't go unnoticed.
 HEARTBEAT_INTERVAL_SECONDS = 3 * 60 * 60
+
+# File that records the first time each Amazon item went available (preorder opens).
+PREORDER_LOG_FILE = os.path.join(os.path.dirname(__file__), "preorder_log.json")
 
 
 def _is_failure(result) -> bool:
@@ -210,6 +221,17 @@ def run_monitor(config: dict, release_mode: bool = False):
     # Last time we posted a heartbeat to Discord
     last_heartbeat = time.monotonic()
 
+    # Last time we printed a terminal status line
+    last_terminal_status = time.monotonic()
+    TERMINAL_STATUS_INTERVAL = 5 * 60  # print a "still alive" line every 5 minutes
+
+    # Persistent log of when each Amazon item first opened for preorder.
+    if os.path.exists(PREORDER_LOG_FILE):
+        with open(PREORDER_LOG_FILE) as f:
+            preorder_log: dict = json.load(f)
+    else:
+        preorder_log: dict = {}
+
     retailer_instances = build_retailer_instances(watchlist)
 
     # Build the per-item schedule. `next_check[item_id]` is a monotonic
@@ -231,14 +253,13 @@ def run_monitor(config: dict, release_mode: bool = False):
     RETAILER_LABELS = {
         "amazon": "Amazon",
         "best_buy": "Best Buy",
-        "target": "Target",
-        "walmart": "Walmart",
+        "best_buy_search": "Best Buy",
         "pokemon_center": "Pokemon Center",
         "pokemon_center_sitemap": "Pokemon Center",
+        "pokemon_center_category": "Pokemon Center",
         "premium_bandai": "Bandai",
         "premium_bandai_series": "Bandai",
         "plaza_japan": "Plaza Japan",
-        "square_enix": "Square Enix",
     }
 
     mode_label = "🚀 RELEASE MODE" if release_mode else "📡 Normal mode"
@@ -259,8 +280,8 @@ def run_monitor(config: dict, release_mode: bool = False):
     for label, entries in grouped.items():
         print(f"\n  {label.upper()}")
         for item, base in entries:
-            print(f"    · {item.get('name', '?')} — ~{base:.0f}s")
-            print(f"      {item.get('url', '')}")
+            print(f"    · {YELLOW}{item.get('name', '?')}{RESET} — ~{base:.0f}s")
+            print(f"      {DIM}{item.get('url', '')}{RESET}")
 
     print(f"\n  Press Ctrl+C to stop")
     print(f"{'-'*60}")
@@ -283,13 +304,16 @@ def run_monitor(config: dict, release_mode: bool = False):
         # Check due items in schedule order so the oldest-overdue goes first
         due_items.sort(key=lambda item: next_check[_item_id(item)])
 
-        # Auto release mode — kick into fast polling during configured drop windows
-        effective_release = release_mode or _in_drop_window(drop_windows)
-
         for item in due_items:
             retailer_key = item.get("retailer")
             retailer = retailer_instances.get(retailer_key)
             item_id = _item_id(item)
+
+            # Release mode (fast polling) only applies to Pokemon Center —
+            # other retailers have their own safe intervals and don't need to
+            # hammer at 10s during a PC drop window.
+            is_pc = retailer_key in ("pokemon_center", "pokemon_center_sitemap", "pokemon_center_category")
+            effective_release = release_mode or (is_pc and _in_drop_window(drop_windows))
 
             # Stagger: if we just hit this same retailer, wait a bit before
             # the next request to it.
@@ -305,7 +329,7 @@ def run_monitor(config: dict, release_mode: bool = False):
             try:
                 result = retailer.check_availability(item)
             except Exception as e:
-                print(f"[{timestamp}]   ⚠️  Error checking {item.get('name', '?')}: {e}")
+                print(f"{DIM}[{timestamp}]{RESET}   ⚠️  Error checking {YELLOW}{item.get('name', '?')}{RESET}: {RED}{e}{RESET}")
                 failure_counts[item_id] = failure_counts.get(item_id, 0) + 1
                 if (
                     item_id not in failing
@@ -326,9 +350,15 @@ def run_monitor(config: dict, release_mode: bool = False):
 
             price_str = f"${result.price:.2f}" if result.price else ""
             if result.available:
-                print(f"[{timestamp}]   ✅ [{result.retailer}] {result.product_name} {price_str}")
+                print(f"{DIM}[{timestamp}]{RESET}   ✅ {GREEN}[{result.retailer}] {YELLOW}{result.product_name}{RESET} {price_str}")
                 if result.note:
                     print(f"     → {result.note}")
+            elif result.note:
+                # Print dim note for non-available results that have something to say
+                # (skipped, partial fetch, initialized, errors, etc.) — skip empty notes
+                _skip_notes = ("initialized", "tracking ", "none new", "nothing new")
+                if not any(s in result.note.lower() for s in _skip_notes):
+                    print(f"{DIM}[{timestamp}]   ⬜ [{result.retailer}] {result.product_name} → {result.note}{RESET}")
 
             # Track failure/recovery transitions and alert once on each.
             # A single bad check just increments a counter — only
@@ -342,34 +372,55 @@ def run_monitor(config: dict, release_mode: bool = False):
             else:
                 failure_counts[item_id] = 0
 
+            # Best Buy pre-release products are frequently unavailable in the
+            # API until they actually launch — silence failure alerts for them
+            # entirely so they don't spam. Stock alerts still fire normally.
+            suppress_failure = retailer_key in ("best_buy", "best_buy_search")
+
             if (
                 is_fail
                 and not was_failing
                 and failure_counts[item_id] >= CONSECUTIVE_FAILURE_THRESHOLD
             ):
                 failing.add(item_id)
-                print(f"[{timestamp}]   🚨 [{result.retailer}] {item.get('name', '?')} check is now FAILING")
-                discord_webhook.send_status_alert(
-                    retailer=result.retailer,
-                    product_name=item.get("name", result.product_name),
-                    url=result.url,
-                    note=f"{result.note} (failed {failure_counts[item_id]}x in a row)",
-                    recovered=False,
-                )
+                if not suppress_failure:
+                    print(f"{DIM}[{timestamp}]{RESET}   🚨 {CYAN}[{result.retailer}]{RESET} {YELLOW}{item.get('name', '?')}{RESET} {RED}check is now FAILING{RESET}")
+                    discord_webhook.send_status_alert(
+                        retailer=result.retailer,
+                        product_name=item.get("name", result.product_name),
+                        url=result.url,
+                        note=f"{result.note} (failed {failure_counts[item_id]}x in a row)",
+                        recovered=False,
+                    )
             elif not is_fail and was_failing:
                 failing.discard(item_id)
-                print(f"[{timestamp}]   ✅ [{result.retailer}] {item.get('name', '?')} check has RECOVERED")
-                discord_webhook.send_status_alert(
-                    retailer=result.retailer,
-                    product_name=item.get("name", result.product_name),
-                    url=result.url,
-                    note="Check is working normally again.",
-                    recovered=True,
-                )
+                if not suppress_failure:
+                    print(f"{DIM}[{timestamp}]{RESET}   ✅ {CYAN}[{result.retailer}]{RESET} {YELLOW}{item.get('name', '?')}{RESET} {GREEN}check has RECOVERED{RESET}")
+                    discord_webhook.send_status_alert(
+                        retailer=result.retailer,
+                        product_name=item.get("name", result.product_name),
+                        url=result.url,
+                        note="Check is working normally again.",
+                        recovered=True,
+                    )
 
             # Fire alerts if newly in stock
             if result.available and item_id not in alerted:
                 alerted.add(item_id)
+
+                # Log the first time an Amazon item opens for preorder
+                if retailer_key == "amazon" and item_id not in preorder_log:
+                    full_ts = datetime.now(PST).strftime("%Y-%m-%d %H:%M:%S PST")
+                    preorder_log[item_id] = {
+                        "name": item.get("name", result.product_name),
+                        "url": result.url,
+                        "first_seen": full_ts,
+                    }
+                    with open(PREORDER_LOG_FILE, "w") as f:
+                        json.dump(preorder_log, f, indent=2)
+                    print(f"\n  📋 {CYAN}[Amazon preorder log]{RESET} {YELLOW}{item.get('name', result.product_name)}{RESET}")
+                    print(f"     First seen: {GREEN}{full_ts}{RESET}\n")
+
                 # For sitemap detections, send an extra direct Discord ping
                 # so the new product notification is never lost after a failure alert
                 if retailer_key == "pokemon_center_sitemap":
@@ -384,11 +435,8 @@ def run_monitor(config: dict, release_mode: bool = False):
             elif not result.available and item_id in alerted:
                 # Item went back out of stock — reset so we alert again next drop
                 alerted.discard(item_id)
-                print(f"  ↩️  [{result.retailer}] {result.product_name} is back out of stock")
+                print(f"  ↩️  {CYAN}[{result.retailer}]{RESET} {YELLOW}{result.product_name}{RESET} is back out of stock")
 
-            # Reschedule — re-check drop window each time so fast polling
-            # kicks in or out automatically as time windows open/close
-            effective_release = release_mode or _in_drop_window(drop_windows)
             last_retailer_check[retailer_key] = time.monotonic()
             base = _base_interval(item, retailer, effective_release, release_interval)
             next_check[item_id] = time.monotonic() + _jittered(base)
@@ -397,9 +445,16 @@ def run_monitor(config: dict, release_mode: bool = False):
         # silently died or hung without anyone noticing for a day.
         if time.monotonic() - last_heartbeat >= HEARTBEAT_INTERVAL_SECONDS:
             pst_hour = datetime.now(PST).hour
-            if not (2 <= pst_hour < 6) and not (13 <= pst_hour < 17):
+            if not (2 <= pst_hour < 6):
                 discord_webhook.send_heartbeat(valid_items, failing)
             last_heartbeat = time.monotonic()
+
+        # Periodic terminal status line so the log isn't completely silent
+        if time.monotonic() - last_terminal_status >= TERMINAL_STATUS_INTERVAL:
+            ts = datetime.now(PST).strftime("%m/%d %H:%M:%S PST")
+            fail_note = f" · {RED}{len(failing)} failing{RESET}" if failing else ""
+            print(f"{DIM}[{ts}] 💓 Monitor alive — watching {len(valid_items)} item(s){fail_note}{RESET}")
+            last_terminal_status = time.monotonic()
 
         time.sleep(TICK_SECONDS)
 

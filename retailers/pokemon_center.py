@@ -452,3 +452,140 @@ class PokemonCenterSitemap(RetailerBase):
                 price=None,
                 note=str(e),
             )
+
+
+class PokemonCenterCategory(RetailerBase):
+    """
+    Watches a Pokemon Center category page (e.g. /category/new-releases or
+    /category/back-in-stock) for products that are actually live and purchasable.
+
+    Unlike the sitemap watcher, this catches drops the moment they appear on
+    the live category page — not when the URL is pre-loaded into the sitemap.
+
+    Uses the same monotonic seen-set pattern: once a product ID is seen it is
+    never "unseen", so transient page changes don't cause false alerts.
+
+    Watchlist entry format:
+      {
+        "name": "Pokemon Center — New Releases",
+        "retailer": "pokemon_center_category",
+        "identifier": "new-releases",
+        "url": "https://www.pokemoncenter.com/category/new-releases"
+      }
+    """
+
+    default_poll_interval = 30
+
+    def __init__(self):
+        self._ever_seen: set = set()
+        self._initialized = False
+        self._min_fetch_size: int = 0
+
+    def _fetch_product_ids(self, category_slug: str) -> tuple:
+        """
+        Tries the PC JSON API for a category listing first.
+        Falls back to scanning the HTML for product URLs.
+        Returns (set_of_product_ids_or_None, error_or_None).
+        """
+        # Try the internal category API used by pokemoncenter.com
+        api_url = f"{BASE}/api/2.0/page-designer/storefront/pages/category/{category_slug}"
+        try:
+            resp = requests.get(api_url, headers=HEADERS, timeout=10)
+            if resp.status_code == 200:
+                import json as _json
+                data = resp.json()
+                ids = set()
+                # Walk the response looking for product IDs
+                raw = _json.dumps(data)
+                # Product IDs match the PC format: digits-digits (e.g. 290-86189)
+                ids = set(re.findall(r'(?<![/\w])(\d{2,3}-\d{4,6})(?![/\w])', raw))
+                if ids:
+                    return ids, None
+        except Exception:
+            pass
+
+        # Fallback: fetch the HTML and scan for /product/ URLs
+        try:
+            resp = requests.get(
+                f"{BASE}/category/{category_slug}",
+                headers={**HEADERS, "Accept": "text/html"},
+                timeout=10,
+            )
+            if resp.status_code != 200:
+                return None, f"HTTP {resp.status_code}"
+            if _is_maintenance_page(resp.text.lower()):
+                return None, "Pokemon Center is in maintenance"
+            # Extract product IDs from product URLs in HTML
+            ids = set(re.findall(
+                r'/product/(\d{2,3}-\d{4,6})/',
+                resp.text,
+            ))
+            return (ids, None) if ids else (None, "No product IDs found in page HTML")
+        except requests.exceptions.Timeout:
+            return None, "Request timed out"
+        except Exception as e:
+            return None, str(e)
+
+    def check_availability(self, item: dict) -> StockResult:
+        category_slug = item.get("identifier", "new-releases")
+        page_url = item.get("url", f"{BASE}/category/{category_slug}")
+        name = item.get("name", f"Pokemon Center — {category_slug}")
+
+        ids, error = self._fetch_product_ids(category_slug)
+
+        if ids is None:
+            return StockResult(
+                available=False,
+                retailer="Pokémon Center (Category)",
+                product_name=name,
+                url=page_url,
+                price=None,
+                note=f"Could not fetch category page — {error}",
+            )
+
+        if not self._initialized:
+            self._ever_seen = set(ids)
+            self._min_fetch_size = max(1, len(ids) // 2)
+            self._initialized = True
+            return StockResult(
+                available=False,
+                retailer="Pokémon Center (Category)",
+                product_name=name,
+                url=page_url,
+                price=None,
+                note=f"Initialized — tracking {len(ids)} product(s) on {category_slug}",
+            )
+
+        if len(ids) < self._min_fetch_size:
+            return StockResult(
+                available=False,
+                retailer="Pokémon Center (Category)",
+                product_name=name,
+                url=page_url,
+                price=None,
+                note=f"Only {len(ids)} product(s) returned (expected ≥{self._min_fetch_size}) — partial fetch, skipping",
+            )
+
+        new_ids = ids - self._ever_seen
+        self._ever_seen |= ids
+
+        if new_ids:
+            lines = [f"[NEW] pokemoncenter.com/product/{pid}" for pid in sorted(new_ids)]
+            alert_url = f"{BASE}/product/{sorted(new_ids)[0]}"
+            return StockResult(
+                available=True,
+                retailer="Pokémon Center (Category)",
+                product_name=f"NEW on Pokemon Center: {len(new_ids)} product(s) on {category_slug}",
+                url=alert_url,
+                price=None,
+                note="\n".join(lines),
+            )
+
+        return StockResult(
+            available=False,
+            retailer="Pokémon Center (Category)",
+            product_name=name,
+            url=page_url,
+            price=None,
+            note=None,
+        )

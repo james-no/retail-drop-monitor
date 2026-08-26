@@ -1,4 +1,4 @@
-from . import discord_webhook, mac_notification, twilio_sms, sound
+from . import discord_webhook, mac_notification, sound
 
 
 def fire_all(result) -> None:
@@ -7,5 +7,4 @@ def fire_all(result) -> None:
     print(f"  🔗 {result.url}")
     discord_webhook.send_alert(result)
     mac_notification.send_alert(result)
-    twilio_sms.send_alert(result)
     sound.send_alert(result)

@@ -6,11 +6,10 @@
     <key>Label</key>
     <string>com.jamesno.retaildropmonitor</string>
 
-    <!-- Use the venv Python directly — no need to activate -->
     <key>ProgramArguments</key>
     <array>
-        <string>/Users/jamesno/Documents/retail-drop-monitor/venv/bin/python</string>
-        <string>/Users/jamesno/Documents/retail-drop-monitor/monitor.py</string>
+        <string>/bin/bash</string>
+        <string>/Users/jamesno/Documents/retail-drop-monitor/launchd_start.sh</string>
     </array>
 
     <!-- Run from the project folder so config.json and .env are found -->

@@ -13,10 +13,14 @@ def send_alert(result) -> bool:
     subtitle = result.product_name
     body = f"${result.price:.2f}" if result.price else "Tap to open product page"
 
+    # Escape quotes to prevent osascript injection / broken script
+    def _esc(s: str) -> str:
+        return s.replace("\\", "\\\\").replace('"', '\\"')
+
     script = (
-        f'display notification "{body}" '
-        f'with title "{title}" '
-        f'subtitle "{subtitle}" '
+        f'display notification "{_esc(body)}" '
+        f'with title "{_esc(title)}" '
+        f'subtitle "{_esc(subtitle)}" '
         f'sound name "Glass"'
     )
 

@@ -1,0 +1,64 @@
+--- Launch attempt Tue Aug 18 10:22:44 PDT 2026 ---
+PATH: /opt/homebrew/opt/postgresql@16/bin:/opt/homebrew/opt/postgresql@16/bin:/opt/homebrew/opt/python@3.13/libexec/bin:/opt/homebrew/opt/openjdk/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/System/Cryptexes/App/usr/bin:/usr/bin:/bin:/usr/sbin:/sbin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin:/pkg/env/global/bin
+Python binary: /Users/jamesno/Documents/retail-drop-monitor/venv/bin/python3
+Python exists: yes
+Python version: Python 3.14.3
+Testing imports...
+Import exit code: 0
+Starting monitor...
+
+============================================================
+  Retail Drop Monitor — 📡 Normal mode
+  Watching 14 item(s)
+
+  POKEMON CENTER
+    · [1;93mPokemon Center Sitemap — watch for 30th Anniversary drops[0m — ~30s
+      [90mhttps://www.pokemoncenter.com/sitemap.xml[0m
+
+  BANDAI
+    · [1;93mOne Piece Card Game — New Drops (Bandai Card Shop)[0m — ~60s
+      [90mhttps://p-bandai.com/us/series/onepiece-series?_f_shops=05-0004&_f_series=03-002[0m
+    · [1;93mDigimon Card Game — New Drops[0m — ~60s
+      [90mhttps://p-bandai.com/us/series/digimon-series?_f_series=03-042[0m
+
+  PLAZA JAPAN
+    · [1;93mPlaza Japan — Pokemon TCG Booster Boxes[0m — ~60s
+      [90mhttps://www.plazajapan.com/pokemon/pokemon-card-game-booster-boxes/[0m
+    · [1;93mPlaza Japan — Pokemon TCG Accessories[0m — ~60s
+      [90mhttps://www.plazajapan.com/pokemon/[0m
+
+  BEST BUY
+    · [1;93mBest Buy — Pokemon 30th Anniversary Search[0m — ~300s
+      [90mhttps://www.bestbuy.com/site/searchpage.jsp?id=pcat17071&st=pokemon%2030[0m
+    · [1;93mPokemon TCG 30th Celebration Ultra Premium Collection[0m — ~30s
+      [90mhttps://www.bestbuy.com/product/pokemon-trading-card-game-30th-celebration-ultra-premium-collection-day-or-night-1-ultra-premium-collection-per-order-styles-may-vary/JJG2TL8254[0m
+    · [1;93mPokemon TCG 30th Celebration Elite Trainer Box[0m — ~30s
+      [90mhttps://www.bestbuy.com/product/pokemon-trading-card-game-30th-celebration-elite-trainer-box/JJG2TL8XCJ[0m
+    · [1;93mPokemon TCG 30th Celebration Ditto Premium Collection[0m — ~30s
+      [90mhttps://www.bestbuy.com/product/pokemon-trading-card-game-30th-celebration-ditto-premium-collection/JJG2TL82YW[0m
+    · [1;93mPokemon TCG 30th Celebration Figure Collection Mew / Mewtwo[0m — ~30s
+      [90mhttps://www.bestbuy.com/product/pokemon-trading-card-game-30th-celebration-figure-collection-mew-or-mewto-1-figure-collection-per-order-styles-may-vary/JJG2TL8XX8[0m
+
+  AMAZON
+    · [1;93mPokemon TCG 30th Celebration Ultra Premium Collection[0m — ~90s
+      [90mhttps://www.amazon.com/dp/B0H784PD4X[0m
+    · [1;93mPokemon TCG 30th Celebration Elite Trainer Box[0m — ~90s
+      [90mhttps://www.amazon.com/dp/B0H78BB9TY[0m
+    · [1;93mPokemon TCG 30th Celebration Ditto Premium Collection[0m — ~90s
+      [90mhttps://www.amazon.com/dp/B0H7815T4Y[0m
+    · [1;93mPokemon TCG 30th Celebration Mew / Mewtwo Figure Collections[0m — ~90s
+      [90mhttps://www.amazon.com/dp/B0H788HLPY[0m
+
+  Press Ctrl+C to stop
+------------------------------------------------------------
+  Quick reference:
+    cd ~/Documents/retail-drop-monitor
+    source venv/bin/activate             # do this first, every new terminal
+    python3 monitor.py                  # normal mode (this)
+    python3 monitor.py --release-mode   # 10s polling during a known drop
+    python3 monitor.py --test-alerts    # fire a test alert on all channels
+============================================================
+
+
+
+👋 Monitor stopped.
