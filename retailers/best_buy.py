@@ -97,13 +97,9 @@ class BestBuy(RetailerBase):
             )
 
         try:
-            # Use the canonical .p URL format if we have a numeric SKU
-            page_url = url
-            if sku.isdigit():
-                page_url = f"https://www.bestbuy.com/site/product/{sku}.p?skuId={sku}"
-
-            # Wait for networkidle so React finishes rendering availability
-            html = fetch_page(page_url, wait_until="networkidle", timeout_ms=30_000)
+            # Use the URL from config directly — don't reconstruct it
+            # domcontentloaded is enough; networkidle never fires on Best Buy
+            html = fetch_page(url, wait_until="domcontentloaded", timeout_ms=30_000)
             html_lower = html.lower()
 
             if "add to cart" in html_lower:
@@ -204,7 +200,7 @@ class BestBuySearch(RetailerBase):
             )
 
         try:
-            html = fetch_page(url, wait_until="networkidle", timeout_ms=45_000)
+            html = fetch_page(url, wait_until="domcontentloaded", timeout_ms=30_000)
         except Exception as e:
             return StockResult(
                 available=False,
