@@ -1,59 +1,68 @@
 """
 Best Buy retailer module.
 
-Uses a headless browser to load the product page and check availability.
-Best Buy is React-rendered but availability signals (Add to Cart / Sold Out)
-are present in the rendered DOM.
+Uses curl_cffi to mimic Chrome's exact TLS fingerprint, bypassing Akamai
+bot detection which blocks both plain requests and headless browsers at the
+HTTP/2 protocol level.
+
+Install: pip install curl_cffi
 
 How to find the SKU for any Best Buy product:
   - Go to the product page
   - The SKU is in the URL: bestbuy.com/site/[name]/[SKU].p
-  - Or look for "SKU:" on the product page itself
 
 Watchlist entry format:
   {
     "name": "Pokemon TCG 30th Celebration ETB",
     "retailer": "best_buy",
-    "identifier": "6685559",          <-- Best Buy SKU
-    "url": "https://www.bestbuy.com/site/..."
+    "identifier": "6685559",
+    "url": "https://www.bestbuy.com/site/pokemon-tcg.../6685559.p"
   }
 """
 
 import re
-import requests
-
 from .base import RetailerBase, StockResult
 
-# Best Buy's internal product availability API (used by their website, no key needed)
 AVAILABILITY_URL = "https://www.bestbuy.com/api/tcfr/product-badging/v1/pcmcat-pc/us/en/badging"
 
-API_HEADERS = {
+HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
         "AppleWebKit/537.36 (KHTML, like Gecko) "
         "Chrome/125.0.0.0 Safari/537.36"
     ),
-    "Accept": "application/json",
-    "Origin": "https://www.bestbuy.com",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
     "Referer": "https://www.bestbuy.com/",
 }
 
 
+def _cffi_get(url, *, params=None, headers=None, timeout=15):
+    """GET using curl_cffi with Chrome TLS fingerprint."""
+    from curl_cffi import requests as cf
+    return cf.get(
+        url,
+        params=params,
+        headers=headers or HEADERS,
+        impersonate="chrome120",
+        timeout=timeout,
+    )
+
+
 class BestBuy(RetailerBase):
-    default_poll_interval = 120  # 2-min interval to stay under rate limits
+    default_poll_interval = 120
 
     def check_availability(self, item: dict) -> StockResult:
         sku = item["identifier"]
         url = item["url"]
         name = item["name"]
 
-        # Try the lightweight JSON API first (no browser needed)
+        # Try the JSON API first — lightweight, no full page load
         try:
-            resp = requests.get(
+            resp = _cffi_get(
                 AVAILABILITY_URL,
                 params={"skus": sku},
-                headers=API_HEADERS,
-                timeout=10,
+                headers={**HEADERS, "Accept": "application/json"},
             )
             if resp.status_code == 200:
                 data = resp.json()
@@ -73,19 +82,6 @@ class BestBuy(RetailerBase):
                             price=price,
                             note="In stock — GO GO GO" if available else None,
                         )
-        except Exception:
-            pass  # API blocked or changed — fall through to browser
-
-        # API failed or SKU not in response — use headless browser
-        return self._browser_check(item)
-
-    def _browser_check(self, item: dict) -> StockResult:
-        name = item["name"]
-        url = item["url"]
-        sku = item["identifier"]
-
-        try:
-            from .playwright_base import fetch_page
         except ImportError:
             return StockResult(
                 available=False,
@@ -93,53 +89,57 @@ class BestBuy(RetailerBase):
                 product_name=name,
                 url=url,
                 price=None,
-                note="Playwright not installed — run: pip install playwright && playwright install chromium",
+                note="curl_cffi not installed — run: pip install curl_cffi",
             )
+        except Exception:
+            pass  # API blocked — fall through to page scrape
+
+        # API failed — scrape the product page directly
+        return self._page_check(item)
+
+    def _page_check(self, item: dict) -> StockResult:
+        name = item["name"]
+        url = item["url"]
 
         try:
-            # Use the URL from config directly — don't reconstruct it
-            # domcontentloaded is enough; networkidle never fires on Best Buy
-            html = fetch_page(url, wait_until="domcontentloaded", timeout_ms=30_000)
-            html_lower = html.lower()
-
-            if "add to cart" in html_lower:
-                # Try to extract price from the rendered page
-                price = None
-                price_match = re.search(
-                    r'"priceView"[^}]*"customerPrice"\s*:\s*([0-9.]+)',
-                    html,
+            resp = _cffi_get(url, timeout=20)
+            if resp.status_code != 200:
+                return StockResult(
+                    available=False,
+                    retailer="Best Buy",
+                    product_name=name,
+                    url=url,
+                    price=None,
+                    note=None,
                 )
-                if price_match:
-                    try:
-                        price = float(price_match.group(1))
-                    except ValueError:
-                        pass
+            html = resp.text.lower()
+
+            if "add to cart" in html or "check stores" in html:
                 return StockResult(
                     available=True,
                     retailer="Best Buy",
                     product_name=name,
                     url=url,
-                    price=price,
+                    price=None,
                     note="In stock — GO GO GO",
                 )
-            elif any(s in html_lower for s in ("sold out", "coming soon", "unavailable")):
-                return StockResult(
-                    available=False,
-                    retailer="Best Buy",
-                    product_name=name,
-                    url=url,
-                    price=None,
-                    note=None,
-                )
-            else:
-                return StockResult(
-                    available=False,
-                    retailer="Best Buy",
-                    product_name=name,
-                    url=url,
-                    price=None,
-                    note=None,
-                )
+            return StockResult(
+                available=False,
+                retailer="Best Buy",
+                product_name=name,
+                url=url,
+                price=None,
+                note=None,
+            )
+        except ImportError:
+            return StockResult(
+                available=False,
+                retailer="Best Buy",
+                product_name=name,
+                url=url,
+                price=None,
+                note="curl_cffi not installed — run: pip install curl_cffi",
+            )
         except Exception as e:
             return StockResult(
                 available=False,
@@ -147,14 +147,13 @@ class BestBuy(RetailerBase):
                 product_name=name,
                 url=url,
                 price=None,
-                note=f"Browser check error: {e}",
+                note=None,
             )
 
 
 def _bb_product_name(url: str) -> str:
-    """Extract a human-readable product name from a Best Buy product URL."""
     try:
-        slug = url.split("/product/")[-1].rsplit("/", 1)[0]
+        slug = url.split("/site/")[-1].rsplit("/", 1)[0]
         return slug.replace("-", " ").title()
     except Exception:
         return url
@@ -162,8 +161,7 @@ def _bb_product_name(url: str) -> str:
 
 class BestBuySearch(RetailerBase):
     """
-    Watches a Best Buy search results page for new products.
-    Uses a headless browser so the React-rendered results actually appear.
+    Watches a Best Buy search results page for new 30th Anniversary products.
 
     Watchlist entry format:
       {
@@ -175,7 +173,7 @@ class BestBuySearch(RetailerBase):
       }
     """
 
-    default_poll_interval = 300  # 5 min — search page, not a product SKU
+    default_poll_interval = 300
 
     def __init__(self):
         self._ever_seen: set = set()
@@ -188,7 +186,17 @@ class BestBuySearch(RetailerBase):
         keywords = [kw.lower() for kw in item.get("keywords", [])]
 
         try:
-            from .playwright_base import fetch_page
+            resp = _cffi_get(url, timeout=20)
+            if resp.status_code != 200:
+                return StockResult(
+                    available=False,
+                    retailer="Best Buy Search",
+                    product_name=name,
+                    url=url,
+                    price=None,
+                    note=None,
+                )
+            html = resp.text
         except ImportError:
             return StockResult(
                 available=False,
@@ -196,19 +204,16 @@ class BestBuySearch(RetailerBase):
                 product_name=name,
                 url=url,
                 price=None,
-                note="Playwright not installed — run: pip install playwright && playwright install chromium",
+                note="curl_cffi not installed — run: pip install curl_cffi",
             )
-
-        try:
-            html = fetch_page(url, wait_until="domcontentloaded", timeout_ms=30_000)
-        except Exception as e:
+        except Exception:
             return StockResult(
                 available=False,
                 retailer="Best Buy Search",
                 product_name=name,
                 url=url,
                 price=None,
-                note=f"Search page error: {e}",
+                note=None,
             )
 
         raw_links = re.findall(
@@ -236,7 +241,7 @@ class BestBuySearch(RetailerBase):
                 product_name=name,
                 url=url,
                 price=None,
-                note="No matching products in search results",
+                note=None,
             )
 
         if not self._initialized:
@@ -259,7 +264,7 @@ class BestBuySearch(RetailerBase):
                 product_name=name,
                 url=url,
                 price=None,
-                note=f"Only {len(matching)} results (expected ≥{self._min_fetch_size}) — skipping",
+                note=None,
             )
 
         new_urls = matching - self._ever_seen
