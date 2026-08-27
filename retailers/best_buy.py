@@ -28,7 +28,7 @@ AVAILABILITY_URL = "https://www.bestbuy.com/api/tcfr/product-badging/v1/pcmcat-p
 
 
 class BestBuy(RetailerBase):
-    default_poll_interval = 30
+    default_poll_interval = 120  # API gets rate-limited at 30s; 2-min interval reduces noise
 
     HEADERS = {
         **RetailerBase.BASE_HEADERS,
@@ -85,8 +85,15 @@ class BestBuy(RetailerBase):
                     price = product.get("regularPrice") or product.get("salePrice")
                     break
             else:
-                # SKU not in response — fall back to page scrape
-                return self._page_fallback(item)
+                # SKU not in response — API format may have changed; silent retry
+                return StockResult(
+                    available=False,
+                    retailer="Best Buy",
+                    product_name=name,
+                    url=url,
+                    price=None,
+                    note=None,
+                )
 
             return StockResult(
                 available=available,
@@ -98,7 +105,16 @@ class BestBuy(RetailerBase):
             )
 
         except requests.RequestException:
-            return self._page_fallback(item)
+            # Don't fall back to the product page — it's also blocked/slow and
+            # the 15s timeout just slows the entire monitor loop.
+            return StockResult(
+                available=False,
+                retailer="Best Buy",
+                product_name=name,
+                url=url,
+                price=None,
+                note=None,  # silent — API being blocked is expected noise
+            )
 
     def _page_fallback(self, item: dict) -> StockResult:
         """

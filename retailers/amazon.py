@@ -79,10 +79,26 @@ class Amazon(RetailerBase):
     """Checks if an Amazon product is available to add to cart."""
     default_poll_interval = 90  # Amazon rate-limits aggressively; don't hammer it
 
+    def __init__(self):
+        # Per-ASIN backoff: when bot-checked, skip polls for 5 minutes
+        self._bot_blocked_until: dict = {}
+
     def check_availability(self, item: dict) -> StockResult:
+        import time
         asin = item.get("identifier", "")
         url = item.get("url") or f"{BASE}/dp/{asin}"
         name = item.get("name", f"Amazon product {asin}")
+
+        # Skip if this ASIN is still in its bot-check cooldown
+        if time.time() < self._bot_blocked_until.get(asin, 0):
+            return StockResult(
+                available=False,
+                retailer="Amazon",
+                product_name=name,
+                url=url,
+                price=None,
+                note=None,  # silent skip during cooldown
+            )
 
         try:
             resp = requests.get(url, headers=HEADERS, timeout=15, allow_redirects=True)
@@ -120,15 +136,16 @@ class Amazon(RetailerBase):
             html = resp.text
             html_lower = html.lower()
 
-            # Bot/CAPTCHA detection
+            # Bot/CAPTCHA detection — set a 5-minute cooldown for this ASIN
             if any(sig in html_lower for sig in BLOCK_SIGNALS):
+                self._bot_blocked_until[asin] = time.time() + 300
                 return StockResult(
                     available=False,
                     retailer="Amazon",
                     product_name=name,
                     url=url,
                     price=None,
-                    note="Amazon returned a bot-check page — not a real stock signal",
+                    note="Amazon returned a bot-check page — cooling down 5 min",
                 )
 
             # Try to get the actual product title from the page
