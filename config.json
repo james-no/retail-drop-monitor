@@ -16,37 +16,18 @@
       "url": "https://www.pokemoncenter.com/sitemap.xml",
       "keywords": []
     },
+
     {
-      "_comment": "--- POKEMON CENTER NEW RELEASES — alerts when products appear on the live new-releases page ---",
-      "name": "Pokemon Center — New Releases",
-      "retailer": "pokemon_center_category",
-      "identifier": "new-releases",
-      "url": "https://www.pokemoncenter.com/category/new-releases"
-    },
-    {
-      "_comment": "--- POKEMON CENTER BACK IN STOCK ---",
-      "name": "Pokemon Center — Back in Stock",
-      "retailer": "pokemon_center_category",
-      "identifier": "back-in-stock",
-      "url": "https://www.pokemoncenter.com/category/back-in-stock"
+      "_comment": "--- PLAZA JAPAN — alerts on any new product on the Pokemon page ---",
+      "name": "Plaza Japan — Pokemon",
+      "retailer": "plaza_japan",
+      "identifier": "plaza-pokemon",
+      "url": "https://www.plazajapan.com/pokemon/",
+      "poll_interval_seconds": 60
     },
 
     {
-      "_comment": "--- PREMIUM BANDAI — fires when new One Piece or Digimon products are uploaded ---",
-      "name": "One Piece Card Game — New Drops (Bandai Card Shop)",
-      "retailer": "premium_bandai_series",
-      "identifier": "series:03-002|shop:05-0004",
-      "url": "https://p-bandai.com/us/series/onepiece-series?_f_shops=05-0004&_f_series=03-002"
-    },
-    {
-      "name": "Digimon Card Game — New Drops",
-      "retailer": "premium_bandai_series",
-      "identifier": "series:03-042",
-      "url": "https://p-bandai.com/us/series/digimon-series?_f_series=03-042"
-    },
-
-    {
-      "_comment": "--- BEST BUY SEARCH — catches any new 30th Anniversary products added to Best Buy's catalog ---",
+      "_comment": "--- BEST BUY SEARCH — catches new 30th Anniversary products added to Best Buy ---",
       "name": "Best Buy — Pokemon 30th Anniversary Search",
       "retailer": "best_buy_search",
       "identifier": "bb-pokemon-30th-search",
@@ -59,34 +40,25 @@
       "name": "Pokemon TCG 30th Celebration Ultra Premium Collection",
       "retailer": "best_buy",
       "identifier": "6685563",
-      "url": "https://www.bestbuy.com/product/pokemon-trading-card-game-30th-celebration-ultra-premium-collection-day-or-night-1-ultra-premium-collection-per-order-styles-may-vary/JJG2TL8254"
+      "url": "https://www.bestbuy.com/site/pokemon-tcg-30th-celebration-ultra-premium-collection/6685563.p"
     },
     {
       "name": "Pokemon TCG 30th Celebration Elite Trainer Box",
       "retailer": "best_buy",
       "identifier": "6685559",
-      "url": "https://www.bestbuy.com/product/pokemon-trading-card-game-30th-celebration-elite-trainer-box/JJG2TL8XCJ"
+      "url": "https://www.bestbuy.com/site/pokemon-tcg-30th-celebration-elite-trainer-box/6685559.p"
     },
     {
       "name": "Pokemon TCG 30th Celebration Ditto Premium Collection",
       "retailer": "best_buy",
       "identifier": "6685562",
-      "url": "https://www.bestbuy.com/product/pokemon-trading-card-game-30th-celebration-ditto-premium-collection/JJG2TL82YW"
+      "url": "https://www.bestbuy.com/site/pokemon-tcg-30th-celebration-ditto-premium-collection/6685562.p"
     },
     {
       "name": "Pokemon TCG 30th Celebration Figure Collection Mew / Mewtwo",
       "retailer": "best_buy",
       "identifier": "6685564",
-      "url": "https://www.bestbuy.com/product/pokemon-trading-card-game-30th-celebration-figure-collection-mew-or-mewto-1-figure-collection-per-order-styles-may-vary/JJG2TL8XX8"
-    },
-
-    {
-      "_comment": "--- PLAZA JAPAN — alerts on any new product on the Pokemon page ---",
-      "name": "Plaza Japan — Pokemon",
-      "retailer": "plaza_japan",
-      "identifier": "plaza-pokemon",
-      "url": "https://www.plazajapan.com/pokemon/",
-      "poll_interval_seconds": 60
+      "url": "https://www.bestbuy.com/site/pokemon-tcg-30th-celebration-figure-collection/6685564.p"
     },
 
     {
