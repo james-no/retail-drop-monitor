@@ -375,7 +375,7 @@ def run_monitor(config: dict, release_mode: bool = False):
             # Best Buy pre-release products are frequently unavailable in the
             # API until they actually launch — silence failure alerts for them
             # entirely so they don't spam. Stock alerts still fire normally.
-            suppress_failure = retailer_key in ("best_buy", "best_buy_search")
+            suppress_failure = retailer_key in ("best_buy", "best_buy_search", "amazon")
 
             if (
                 is_fail

@@ -102,6 +102,13 @@ class Amazon(RetailerBase):
         try:
             html = fetch_page(url, wait_until="domcontentloaded", timeout_ms=30_000)
         except Exception as e:
+            err = str(e)
+            # 404 = Amazon pulled the page or is blocking bots — silent, not a real failure
+            if "404" in err:
+                return StockResult(
+                    available=False, retailer="Amazon", product_name=name,
+                    url=url, price=None, note=None,
+                )
             return StockResult(
                 available=False,
                 retailer="Amazon",
@@ -113,9 +120,9 @@ class Amazon(RetailerBase):
 
         html_lower = html.lower()
 
-        # Bot/CAPTCHA detection — set 5-minute cooldown for this ASIN
+        # Bot/CAPTCHA detection — set 20-minute cooldown for this ASIN
         if any(sig in html_lower for sig in BLOCK_SIGNALS):
-            self._bot_blocked_until[asin] = time.time() + 300
+            self._bot_blocked_until[asin] = time.time() + 1200
             return StockResult(
                 available=False,
                 retailer="Amazon",
@@ -176,7 +183,7 @@ class Amazon(RetailerBase):
         # In-stock or preorder signal
         matched = next((sig for sig in IN_STOCK_SIGNALS if sig in avail_text), None)
         if matched:
-            is_preorder = "pre" in matched or "ships on" in matched or "order" in matched
+            is_preorder = "pre" in matched or "ships on" in matched
             note = "Pre-order is LIVE on Amazon — GO NOW" if is_preorder else "In stock on Amazon — GO GO GO"
 
             # Seller filter
