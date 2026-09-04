@@ -31,6 +31,11 @@ def send_alert(result) -> bool:
             capture_output=True,
         )
         print(f"  [Mac Notification] ✅ Sent")
+
+        # Auto-open the product page in the browser — macOS notifications
+        # sent via osascript can't open URLs on tap, so we open it immediately
+        subprocess.Popen(["open", result.url])
+
         return True
     except subprocess.CalledProcessError as e:
         print(f"  [Mac Notification] ❌ Failed: {e.stderr.decode()}")

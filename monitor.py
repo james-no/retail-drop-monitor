@@ -353,6 +353,7 @@ def run_monitor(config: dict, release_mode: bool = False):
                 print(f"{DIM}[{timestamp}]{RESET}   ✅ {GREEN}[{result.retailer}] {YELLOW}{result.product_name}{RESET} {price_str}")
                 if result.note:
                     print(f"     → {result.note}")
+                print(f"     🔗 {result.url}")
             elif result.note:
                 # Print dim note for non-available results that have something to say
                 # (skipped, partial fetch, initialized, errors, etc.) — skip empty notes
