@@ -1,7 +1,7 @@
 from .best_buy import BestBuy, BestBuySearch
 from .pokemon_center import PokemonCenter, PokemonCenterSitemap, PokemonCenterCategory
 from .premium_bandai import PremiumBandai, PremiumBandaiSeries
-from .plaza_japan import PlazaJapan
+from .plaza_japan import PlazaJapan, PlazaJapanProduct
 from .amazon import Amazon
 
 # Maps the "retailer" field in config.json to the right class
@@ -14,5 +14,6 @@ RETAILER_MAP = {
     "premium_bandai": PremiumBandai,
     "premium_bandai_series": PremiumBandaiSeries,
     "plaza_japan": PlazaJapan,
+    "plaza_japan_product": PlazaJapanProduct,
     "amazon": Amazon,
 }

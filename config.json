@@ -18,11 +18,18 @@
     },
 
     {
-      "_comment": "--- PLAZA JAPAN — alerts on any new product on the Pokemon page ---",
-      "name": "Plaza Japan — Pokemon",
-      "retailer": "plaza_japan",
-      "identifier": "plaza-pokemon",
-      "url": "https://www.plazajapan.com/pokemon/",
+      "_comment": "--- PLAZA JAPAN — specific product stock checks ---",
+      "name": "Plaza Japan — 4521329462189",
+      "retailer": "plaza_japan_product",
+      "identifier": "4521329462189",
+      "url": "https://www.plazajapan.com/4521329462189/",
+      "poll_interval_seconds": 60
+    },
+    {
+      "name": "Plaza Japan — 4521329462424",
+      "retailer": "plaza_japan_product",
+      "identifier": "4521329462424",
+      "url": "https://www.plazajapan.com/4521329462424/",
       "poll_interval_seconds": 60
     },
 
@@ -59,35 +66,6 @@
       "retailer": "best_buy",
       "identifier": "6685564",
       "url": "https://www.bestbuy.com/site/pokemon-tcg-30th-celebration-figure-collection/6685564.p"
-    },
-
-    {
-      "_comment": "--- AMAZON 30TH ANNIVERSARY ---",
-      "name": "Pokemon TCG 30th Celebration Ultra Premium Collection",
-      "retailer": "amazon",
-      "identifier": "B0H784PD4X",
-      "url": "https://www.amazon.com/dp/B0H784PD4X"
-    },
-    {
-      "name": "Pokemon TCG 30th Celebration Elite Trainer Box",
-      "retailer": "amazon",
-      "identifier": "B0H78BB9TY",
-      "url": "https://www.amazon.com/dp/B0H78BB9TY",
-      "_comment": "Only alert when sold by Amazon/Pokemon store at retail price",
-      "max_price": 100,
-      "amazon_direct_only": true
-    },
-    {
-      "name": "Pokemon TCG 30th Celebration Ditto Premium Collection",
-      "retailer": "amazon",
-      "identifier": "B0H7815T4Y",
-      "url": "https://www.amazon.com/dp/B0H7815T4Y"
-    },
-    {
-      "name": "Pokemon TCG 30th Celebration Mew / Mewtwo Figure Collections",
-      "retailer": "amazon",
-      "identifier": "B0H788HLPY",
-      "url": "https://www.amazon.com/dp/B0H788HLPY"
     }
   ]
 }
